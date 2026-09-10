@@ -1,0 +1,12 @@
+fastapi
+uvicorn[standard]
+pydantic
+pydantic-settings
+python-dotenv
+httpx
+sqlalchemy
+pymysql
+requests
+pytz
+tzdata
+PyJWT
