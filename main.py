@@ -1,0 +1,46 @@
+import os
+import uvicorn
+from dotenv import load_dotenv
+from fastapi import FastAPI
+from sqlalchemy import text
+
+load_dotenv()
+
+PORT = int(os.getenv("PORT", "8000"))
+CORS_ORIGINS = [o.strip() for o in os.getenv("CORS_ORIGINS", "").split(",") if o.strip()]
+
+app = FastAPI(
+    title="Nucestatic Terminal API",
+    description="API for Nucestatic Terminal",
+    version="1.0.0"
+)
+
+if CORS_ORIGINS:
+    from fastapi.middleware.cors import CORSMiddleware
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=CORS_ORIGINS,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+@app.get("/api/health")
+async def health_check():
+    from app.databases.config import SessionLocal
+    db = SessionLocal()
+    try:
+        db.execute(text("SELECT 1"))
+        return {"status": "healthy", "database": "connected"}
+    except Exception:
+        return {"status": "unhealthy", "database": "disconnected"}
+    finally:
+        db.close()
+
+if __name__ == "__main__":
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=PORT,
+        reload=True
+    )
