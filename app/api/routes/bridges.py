@@ -39,7 +39,7 @@ def _probe(url: str) -> str:
         return "disconnected"
 
 
-@router.get("/", response_model=list[BridgeApiResponse])
+@router.get("", response_model=list[BridgeApiResponse])
 def list_bridges(authorization: str = Header(None)):
     db, _ = require_user(authorization)
     try:
@@ -51,7 +51,7 @@ def list_bridges(authorization: str = Header(None)):
         db.close()
 
 
-@router.post("/", response_model=BridgeApiResponse)
+@router.post("", response_model=BridgeApiResponse)
 def create_bridge(req: BridgeApiRequest, authorization: str = Header(None)):
     name = req.name.strip()
     url = req.url.strip().rstrip("/")

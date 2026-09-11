@@ -31,7 +31,7 @@ def _validate_uniqueness(db, username: str, email: str, user_id: int | None = No
         raise HTTPException(status_code=409, detail="Email already taken")
 
 
-@router.get("/", response_model=list[UserResponse])
+@router.get("", response_model=list[UserResponse])
 def list_users(q: str | None = Query(None), authorization: str = Header(None)):
     db, _ = require_user(authorization)
     try:
@@ -47,7 +47,7 @@ def list_users(q: str | None = Query(None), authorization: str = Header(None)):
         db.close()
 
 
-@router.post("/", response_model=UserResponse)
+@router.post("", response_model=UserResponse)
 def create_user(req: CreateUserRequest, authorization: str = Header(None)):
     if len(req.password) < 6:
         raise HTTPException(status_code=422, detail="Password must be at least 6 characters")

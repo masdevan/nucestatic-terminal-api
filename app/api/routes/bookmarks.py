@@ -6,7 +6,7 @@ from app.api.controllers.auth import require_user
 router = APIRouter()
 
 
-@router.get("/")
+@router.get("")
 def list_bookmarks(
     limit: int = Query(25, ge=1, le=1000),
     page: int = Query(1, ge=1),
@@ -39,7 +39,7 @@ def list_bookmarks(
         db.close()
 
 
-@router.post("/", response_model=BookmarkResponse)
+@router.post("", response_model=BookmarkResponse)
 def create_bookmark(req: BookmarkCreateRequest, authorization: str = Header(None)):
     symbol = req.symbol.strip()
     server = req.server.strip()

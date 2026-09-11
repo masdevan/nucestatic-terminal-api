@@ -5,7 +5,7 @@ from app.api.controllers.auth import require_user
 router = APIRouter()
 
 
-@router.get("/")
+@router.get("")
 def get_stats(authorization: str = Header(None)):
     db, _ = require_user(authorization)
     try:
