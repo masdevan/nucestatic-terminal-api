@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Header, HTTPException, Query
 from sqlalchemy import text
 from app.api.models.bookmark import BookmarkCreateRequest, BookmarkResponse
 from app.api.controllers.auth import require_user
@@ -6,15 +6,35 @@ from app.api.controllers.auth import require_user
 router = APIRouter()
 
 
-@router.get("/", response_model=list[BookmarkResponse])
-def list_bookmarks(authorization: str = Header(None)):
+@router.get("/")
+def list_bookmarks(
+    limit: int = Query(25, ge=1, le=1000),
+    page: int = Query(1, ge=1),
+    authorization: str = Header(None)
+):
     db, row = require_user(authorization)
     try:
-        rows = db.execute(
-            text("SELECT id, symbol, server FROM bookmarks WHERE user_id = :user_id ORDER BY id"),
+        total = db.execute(
+            text("SELECT COUNT(*) FROM bookmarks WHERE user_id = :user_id"),
             {"user_id": row[0]}
+        ).scalar()
+        rows = db.execute(
+            text("SELECT id, symbol, server FROM bookmarks WHERE user_id = :user_id ORDER BY id LIMIT :limit OFFSET :offset"),
+            {"user_id": row[0], "limit": limit, "offset": (page - 1) * limit}
         ).fetchall()
-        return [BookmarkResponse(id=r[0], symbol=r[1], server=r[2]) for r in rows]
+        total_pages = (total + limit - 1) // limit if total > 0 else 1
+        return {
+            "bookmarks": [BookmarkResponse(id=r[0], symbol=r[1], server=r[2]).model_dump() for r in rows],
+            "total": total,
+            "pagination": {
+                "page": page,
+                "limit": limit,
+                "total": total,
+                "total_pages": total_pages,
+                "has_next": page * limit < total,
+                "has_prev": page > 1
+            }
+        }
     finally:
         db.close()
 
