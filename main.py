@@ -15,6 +15,12 @@ app = FastAPI(
     version="1.0.0"
 )
 
+from app.api.routes.auth import router as auth_router
+app.include_router(auth_router, prefix="/api/auth", tags=["Auth"])
+
+from app.api.routes.users import router as users_router
+app.include_router(users_router, prefix="/api/users", tags=["Users"])
+
 if CORS_ORIGINS:
     from fastapi.middleware.cors import CORSMiddleware
     app.add_middleware(

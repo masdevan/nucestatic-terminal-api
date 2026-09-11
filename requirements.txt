@@ -6,3 +6,4 @@ sqlalchemy
 pymysql
 PyJWT
 pytz
+bcrypt
