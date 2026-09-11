@@ -24,6 +24,9 @@ app.include_router(users_router, prefix="/api/users", tags=["Users"])
 from app.api.routes.bookmarks import router as bookmarks_router
 app.include_router(bookmarks_router, prefix="/api/bookmarks", tags=["Bookmarks"])
 
+from app.api.routes.bridges import router as bridges_router
+app.include_router(bridges_router, prefix="/api/bridge-apis", tags=["Bridge APIs"])
+
 if CORS_ORIGINS:
     from fastapi.middleware.cors import CORSMiddleware
     app.add_middleware(
