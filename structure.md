@@ -1,13 +1,17 @@
 nucestatic-terminal-api
+├── .dockerignore
 ├── .env
 ├── .env.example
 ├── .gitignore
+├── Dockerfile
+├── docker-compose.yml
 ├── main.py
 ├── migrate.py
 ├── readme.md
 ├── requirements.txt
 ├── rules.md
 ├── structure.md
+├── update.sh
 └── app
     ├── api
     │   ├── controllers
@@ -21,6 +25,7 @@ nucestatic-terminal-api
     │   │   ├── auth.py
     │   │   ├── bookmarks.py
     │   │   ├── bridges.py
+    │   │   ├── stats.py
     │   │   └── users.py
     │   └── utils
     │       └── security.py
