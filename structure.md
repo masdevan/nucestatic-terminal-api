@@ -20,11 +20,13 @@ nucestatic-terminal-api
     │   │   ├── auth.py
     │   │   ├── bookmark.py
     │   │   ├── bridge.py
+    │   │   ├── indicator.py
     │   │   └── user.py
     │   ├── routes
     │   │   ├── auth.py
     │   │   ├── bookmarks.py
     │   │   ├── bridges.py
+    │   │   ├── indicators.py
     │   │   ├── stats.py
     │   │   └── users.py
     │   └── utils
@@ -36,7 +38,10 @@ nucestatic-terminal-api
         │   ├── manager.py
         │   ├── version_20260910_users.py
         │   ├── version_20260911_bookmarks.py
-        │   └── version_20260911_bridge_apis.py
+        │   ├── version_20260911_bridge_apis.py
+        │   ├── version_20260916_scripts.py
+        │   ├── version_20260917_indicators.py
+        │   └── version_20260918_indicator_names.py
         ├── models
         │   ├── bookmark.py
         │   ├── bridge.py
