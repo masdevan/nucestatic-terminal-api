@@ -17,12 +17,14 @@ nucestatic-terminal-api
     │   ├── controllers
     │   │   └── auth.py
     │   ├── models
+    │   │   ├── alarm.py
     │   │   ├── auth.py
     │   │   ├── bookmark.py
     │   │   ├── bridge.py
     │   │   ├── indicator.py
     │   │   └── user.py
     │   ├── routes
+    │   │   ├── alarms.py
     │   │   ├── auth.py
     │   │   ├── bookmarks.py
     │   │   ├── bridges.py
@@ -41,8 +43,10 @@ nucestatic-terminal-api
         │   ├── version_20260911_bridge_apis.py
         │   ├── version_20260916_scripts.py
         │   ├── version_20260917_indicators.py
-        │   └── version_20260918_indicator_names.py
+        │   ├── version_20260918_indicator_names.py
+        │   └── version_20260919_alarms.py
         ├── models
+        │   ├── alarm.py
         │   ├── bookmark.py
         │   ├── bridge.py
         │   └── user.py

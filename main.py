@@ -33,6 +33,9 @@ app.include_router(indicators_router, prefix="/api/indicators", tags=["Indicator
 from app.api.routes.stats import router as stats_router
 app.include_router(stats_router, prefix="/api/stats", tags=["Stats"])
 
+from app.api.routes.alarms import router as alarms_router
+app.include_router(alarms_router, prefix="/api/alarms", tags=["Alarms"])
+
 if CORS_ORIGINS:
     from fastapi.middleware.cors import CORSMiddleware
     app.add_middleware(
