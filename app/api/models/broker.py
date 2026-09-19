@@ -34,6 +34,21 @@ class BrokerAccountResponse(BaseModel):
     leverage: int
 
 
+class BrokerOrderResponse(BaseModel):
+    id: int
+    symbol: str
+    side: str
+    lots: float
+    entry_price: float
+    tp_price: float | None = None
+    sl_price: float | None = None
+    status: str
+    close_price: float | None = None
+    pnl: float | None = None
+    opened_at: str
+    closed_at: str | None = None
+
+
 class BrokerCreateRequest(BaseModel):
     name: str
     pairs: list[BrokerPairRequest] = []
