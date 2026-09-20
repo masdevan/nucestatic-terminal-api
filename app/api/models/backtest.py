@@ -116,6 +116,7 @@ class BacktestHistoryRequest(BaseModel):
     final_balance: float
     orders: list[BacktestOrderItem] = []
     alarms: list[BacktestAlarmItem] = []
+    metrics: dict | None = None
 
 
 class BacktestHistoryResponse(BaseModel):
@@ -140,3 +141,4 @@ class BacktestHistoryResponse(BaseModel):
 class BacktestHistoryDetailResponse(BacktestHistoryResponse):
     orders: list[BacktestOrderItem] = []
     alarms: list[BacktestAlarmItem] = []
+    metrics: dict | None = None

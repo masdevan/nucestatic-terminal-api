@@ -22,6 +22,7 @@ router = APIRouter()
 MAX_BATCH = 5000
 MAX_ORDERS = 500
 MAX_ALARMS = 500
+MAX_METRICS_CHARS = 100000
 SIDES = {"buy", "sell"}
 ORDER_TYPES = {"market", "limit", "stop"}
 ORDER_STATUSES = {"pending", "open", "closed"}
@@ -458,6 +459,10 @@ def save_history(req: BacktestHistoryRequest, authorization: str = Header(None))
         raise HTTPException(status_code=422, detail=f"Alarms limited to {MAX_ALARMS}")
     orders = [_validate_order(item) for item in req.orders]
     alarms = [_validate_alarm(item) for item in req.alarms]
+    metrics = req.metrics if isinstance(req.metrics, dict) else None
+    metrics_json = json.dumps(metrics) if metrics else None
+    if metrics_json is not None and len(metrics_json) > MAX_METRICS_CHARS:
+        raise HTTPException(status_code=422, detail="Metrics payload too large")
     trade_times = sorted(order.opened_at for order in orders if order.opened_at)
 
     db, user = require_user(authorization)
@@ -471,11 +476,11 @@ def save_history(req: BacktestHistoryRequest, authorization: str = Header(None))
                 INSERT INTO backtest_history
                     (user_id, symbol, master_timeframe, account_id, broker_id, broker_name,
                      account_name, bridge_id, start_date, session_number,
-                     initial_balance, final_balance, orders, alarms, alarm_count, first_trade_at, last_trade_at)
+                     initial_balance, final_balance, orders, alarms, alarm_count, metrics, first_trade_at, last_trade_at)
                 VALUES
                     (:user_id, :symbol, :master_timeframe, :account_id, :broker_id, :broker_name,
                      :account_name, :bridge_id, :start_date, :session_number,
-                     :initial_balance, :final_balance, :orders, :alarms, :alarm_count, :first_trade_at, :last_trade_at)
+                     :initial_balance, :final_balance, :orders, :alarms, :alarm_count, :metrics, :first_trade_at, :last_trade_at)
             """),
             {
                 "user_id": user[0],
@@ -493,6 +498,7 @@ def save_history(req: BacktestHistoryRequest, authorization: str = Header(None))
                 "orders": json.dumps([order.model_dump() for order in orders]),
                 "alarms": json.dumps([alarm.model_dump() for alarm in alarms]),
                 "alarm_count": len(alarms),
+                "metrics": metrics_json,
                 "first_trade_at": trade_times[0] if trade_times else None,
                 "last_trade_at": trade_times[-1] if trade_times else None
             }
@@ -502,7 +508,8 @@ def save_history(req: BacktestHistoryRequest, authorization: str = Header(None))
             text("""
                 SELECT id, symbol, master_timeframe, account_id, broker_id, broker_name,
                        account_name, bridge_id, start_date, initial_balance, final_balance,
-                       first_trade_at, last_trade_at, created_at, session_number, alarm_count
+                       first_trade_at, last_trade_at, created_at, session_number, alarm_count,
+                       metrics
                 FROM backtest_history WHERE id = :history_id
             """),
             {"history_id": result.lastrowid}
@@ -539,7 +546,7 @@ def get_history(history_id: int, authorization: str = Header(None)):
                 SELECT id, symbol, master_timeframe, account_id, broker_id, broker_name,
                        account_name, bridge_id, start_date, initial_balance, final_balance,
                        first_trade_at, last_trade_at, created_at, session_number, alarm_count,
-                       orders, alarms
+                       orders, alarms, metrics
                 FROM backtest_history WHERE id = :history_id AND user_id = :user_id
             """),
             {"history_id": history_id, "user_id": user[0]}
@@ -552,7 +559,8 @@ def get_history(history_id: int, authorization: str = Header(None)):
         return BacktestHistoryDetailResponse(
             **header.model_dump(),
             orders=[BacktestOrderItem(**item) for item in stored_orders],
-            alarms=[BacktestAlarmItem(**item) for item in stored_alarms]
+            alarms=[BacktestAlarmItem(**item) for item in stored_alarms],
+            metrics=json.loads(row[18]) if row[18] else None
         )
     finally:
         db.close()
