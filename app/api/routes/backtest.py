@@ -27,7 +27,7 @@ MAX_METRICS_CHARS = 100000
 SIDES = {"buy", "sell"}
 ORDER_TYPES = {"market", "limit", "stop"}
 ORDER_STATUSES = {"pending", "open", "closed"}
-CLOSE_REASONS = {"tp", "sl", "manual", "cancel", "margin"}
+CLOSE_REASONS = {"tp", "sl", "manual", "cancel", "margin", "partial"}
 
 
 def _validate_symbol(symbol: str) -> str:
