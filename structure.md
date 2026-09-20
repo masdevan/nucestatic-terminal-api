@@ -19,6 +19,7 @@ nucestatic-terminal-api
     │   ├── models
     │   │   ├── alarm.py
     │   │   ├── auth.py
+    │   │   ├── backtest.py
     │   │   ├── bookmark.py
     │   │   ├── bridge.py
     │   │   ├── broker.py
@@ -27,6 +28,7 @@ nucestatic-terminal-api
     │   ├── routes
     │   │   ├── alarms.py
     │   │   ├── auth.py
+    │   │   ├── backtest.py
     │   │   ├── bookmarks.py
     │   │   ├── bridges.py
     │   │   ├── broker_accounts.py
@@ -52,7 +54,8 @@ nucestatic-terminal-api
         │   ├── version_20260919_alarms.py
         │   ├── version_20260920_brokers.py
         │   ├── version_20260921_broker_accounts.py
-        │   └── version_20260922_broker_orders.py
+        │   ├── version_20260922_broker_orders.py
+        │   └── version_20260923_backtest.py
         ├── models
         │   ├── alarm.py
         │   ├── bookmark.py

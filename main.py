@@ -45,6 +45,9 @@ app.include_router(broker_accounts_router, prefix="/api/brokers", tags=["Broker 
 from app.api.routes.broker_orders import router as broker_orders_router
 app.include_router(broker_orders_router, prefix="/api/brokers", tags=["Broker Orders"])
 
+from app.api.routes.backtest import router as backtest_router
+app.include_router(backtest_router, prefix="/api/backtest", tags=["Backtest"])
+
 if CORS_ORIGINS:
     from fastapi.middleware.cors import CORSMiddleware
     app.add_middleware(
