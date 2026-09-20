@@ -84,3 +84,33 @@ class BacktestTradeStateRequest(BaseModel):
 class BacktestTradeStateResponse(BaseModel):
     balance: float
     orders: list[BacktestOrderItem] = []
+
+
+class BacktestHistoryRequest(BaseModel):
+    symbol: str
+    master_timeframe: str
+    account_id: int = 0
+    bridge_id: int = 0
+    start_date: str
+    initial_balance: float
+    final_balance: float
+    orders: list[BacktestOrderItem] = []
+
+
+class BacktestHistoryResponse(BaseModel):
+    id: int
+    session_number: int = 0
+    symbol: str
+    master_timeframe: str
+    account_id: int
+    bridge_id: int
+    start_date: str
+    initial_balance: float
+    final_balance: float
+    first_trade_at: str | None = None
+    last_trade_at: str | None = None
+    created_at: str
+
+
+class BacktestHistoryDetailResponse(BacktestHistoryResponse):
+    orders: list[BacktestOrderItem] = []
