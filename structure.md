@@ -29,6 +29,9 @@ nucestatic-terminal-api
     │   │   ├── auth.py
     │   │   ├── bookmarks.py
     │   │   ├── bridges.py
+    │   │   ├── broker_accounts.py
+    │   │   ├── broker_orders.py
+    │   │   ├── broker_shared.py
     │   │   ├── brokers.py
     │   │   ├── indicators.py
     │   │   ├── stats.py

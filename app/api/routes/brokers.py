@@ -1,33 +1,23 @@
 import math
 import re
-from fastapi import APIRouter, Header, HTTPException, Query
+from fastapi import APIRouter, Header, HTTPException
 from sqlalchemy import text
 from app.api.models.broker import (
-    BrokerAccountRequest,
     BrokerAccountResponse,
-    BrokerAccountUpdate,
-    BrokerCreateRequest,
-    BrokerOrderResponse,
     BrokerPairRequest,
     BrokerPairResponse,
+    BrokerCreateRequest,
     BrokerResponse,
     BrokerUpdateRequest
 )
 from app.api.controllers.auth import require_user
+from app.api.routes.broker_shared import accounts_for, fetch_broker_row, pairs_for, validate_name
 
 router = APIRouter()
 
 SPREAD_TYPES = {"pips", "money"}
 PAIR_PATTERN = re.compile(r"^[A-Z0-9][A-Z0-9._-]{0,19}$")
 MAX_PAIRS = 200
-MAX_LEVERAGE = 10000
-
-
-def _validate_name(name: str) -> str:
-    value = name.strip()
-    if not value or len(value) > 100:
-        raise HTTPException(status_code=422, detail="Name must be 1-100 characters")
-    return value
 
 
 def _validate_pairs(pairs: list[BrokerPairRequest]) -> list[BrokerPairResponse]:
@@ -58,63 +48,6 @@ def _validate_pairs(pairs: list[BrokerPairRequest]) -> list[BrokerPairResponse]:
             )
         )
     return out
-
-
-def _validate_balance(balance: float) -> float:
-    if not math.isfinite(balance) or balance < 0:
-        raise HTTPException(status_code=422, detail="Balance must be zero or greater")
-    return balance
-
-
-def _validate_leverage(leverage: int) -> int:
-    if leverage < 1 or leverage > MAX_LEVERAGE:
-        raise HTTPException(status_code=422, detail=f"Leverage must be 1-{MAX_LEVERAGE}")
-    return leverage
-
-
-def _fetch_row(db, broker_id: int, user_id: int):
-    row = db.execute(
-        text("SELECT id, name, updated_at FROM brokers WHERE id = :broker_id AND user_id = :user_id"),
-        {"broker_id": broker_id, "user_id": user_id}
-    ).fetchone()
-    if not row:
-        raise HTTPException(status_code=404, detail="Broker not found")
-    return row
-
-
-def _pairs_for(db, broker_id: int) -> list[BrokerPairResponse]:
-    rows = db.execute(
-        text("""
-            SELECT pair, spread_type, spread_value, lot FROM broker_pairs
-            WHERE broker_id = :broker_id
-            ORDER BY pair
-        """),
-        {"broker_id": broker_id}
-    ).fetchall()
-    return [
-        BrokerPairResponse(
-            pair=r[0],
-            spread_type=r[1],
-            spread_value=float(r[2]),
-            lot=float(r[3])
-        )
-        for r in rows
-    ]
-
-
-def _accounts_for(db, broker_id: int) -> list[BrokerAccountResponse]:
-    rows = db.execute(
-        text("""
-            SELECT id, name, balance, leverage FROM broker_accounts
-            WHERE broker_id = :broker_id
-            ORDER BY id
-        """),
-        {"broker_id": broker_id}
-    ).fetchall()
-    return [
-        BrokerAccountResponse(id=r[0], name=r[1], balance=float(r[2]), leverage=r[3])
-        for r in rows
-    ]
 
 
 def _insert_pairs(db, broker_id: int, pairs: list[BrokerPairResponse]) -> None:
@@ -208,7 +141,7 @@ def list_brokers(authorization: str = Header(None)):
 
 @router.post("", response_model=BrokerResponse)
 def create_broker(req: BrokerCreateRequest, authorization: str = Header(None)):
-    name = _validate_name(req.name)
+    name = validate_name(req.name)
     pairs = _validate_pairs(req.pairs)
 
     db, user = require_user(authorization)
@@ -247,8 +180,8 @@ def create_broker(req: BrokerCreateRequest, authorization: str = Header(None)):
 def update_broker(broker_id: int, req: BrokerUpdateRequest, authorization: str = Header(None)):
     db, user = require_user(authorization)
     try:
-        row = _fetch_row(db, broker_id, user[0])
-        name = _validate_name(req.name) if req.name is not None else row[1]
+        row = fetch_broker_row(db, broker_id, user[0])
+        name = validate_name(req.name) if req.name is not None else row[1]
         pairs = _validate_pairs(req.pairs) if req.pairs is not None else None
 
         if name != row[1]:
@@ -281,8 +214,8 @@ def update_broker(broker_id: int, req: BrokerUpdateRequest, authorization: str =
         return BrokerResponse(
             id=broker_id,
             name=name,
-            pairs=pairs if pairs is not None else _pairs_for(db, broker_id),
-            accounts=_accounts_for(db, broker_id),
+            pairs=pairs if pairs is not None else pairs_for(db, broker_id),
+            accounts=accounts_for(db, broker_id),
             updated_at=_updated_at(db, broker_id)
         )
     finally:
@@ -293,7 +226,7 @@ def update_broker(broker_id: int, req: BrokerUpdateRequest, authorization: str =
 def delete_broker(broker_id: int, authorization: str = Header(None)):
     db, user = require_user(authorization)
     try:
-        _fetch_row(db, broker_id, user[0])
+        fetch_broker_row(db, broker_id, user[0])
         db.execute(
             text("DELETE FROM broker_pairs WHERE broker_id = :broker_id"),
             {"broker_id": broker_id}
@@ -312,176 +245,5 @@ def delete_broker(broker_id: int, authorization: str = Header(None)):
         )
         db.commit()
         return {"detail": "Broker deleted"}
-    finally:
-        db.close()
-
-
-@router.post("/{broker_id}/accounts", response_model=BrokerAccountResponse)
-def create_account(
-    broker_id: int,
-    req: BrokerAccountRequest,
-    authorization: str = Header(None)
-):
-    name = _validate_name(req.name)
-    balance = _validate_balance(req.balance)
-    leverage = _validate_leverage(req.leverage)
-
-    db, user = require_user(authorization)
-    try:
-        _fetch_row(db, broker_id, user[0])
-        existing = db.execute(
-            text("SELECT id FROM broker_accounts WHERE broker_id = :broker_id AND name = :name"),
-            {"broker_id": broker_id, "name": name}
-        ).fetchone()
-        if existing:
-            raise HTTPException(status_code=409, detail="Account name already exists")
-
-        try:
-            result = db.execute(
-                text("""
-                    INSERT INTO broker_accounts (broker_id, name, balance, leverage)
-                    VALUES (:broker_id, :name, :balance, :leverage)
-                """),
-                {"broker_id": broker_id, "name": name, "balance": balance, "leverage": leverage}
-            )
-            db.commit()
-        except Exception:
-            db.rollback()
-            raise HTTPException(status_code=409, detail="Account name already exists")
-
-        return BrokerAccountResponse(
-            id=result.lastrowid,
-            name=name,
-            balance=balance,
-            leverage=leverage
-        )
-    finally:
-        db.close()
-
-
-@router.patch("/{broker_id}/accounts/{account_id}", response_model=BrokerAccountResponse)
-def update_account(
-    broker_id: int,
-    account_id: int,
-    req: BrokerAccountUpdate,
-    authorization: str = Header(None)
-):
-    db, user = require_user(authorization)
-    try:
-        _fetch_row(db, broker_id, user[0])
-        row = db.execute(
-            text("""
-                SELECT id, name, balance, leverage FROM broker_accounts
-                WHERE id = :account_id AND broker_id = :broker_id
-            """),
-            {"account_id": account_id, "broker_id": broker_id}
-        ).fetchone()
-        if not row:
-            raise HTTPException(status_code=404, detail="Account not found")
-
-        name = _validate_name(req.name) if req.name is not None else row[1]
-        balance = _validate_balance(req.balance) if req.balance is not None else float(row[2])
-        leverage = _validate_leverage(req.leverage) if req.leverage is not None else row[3]
-
-        if name != row[1]:
-            existing = db.execute(
-                text("""
-                    SELECT id FROM broker_accounts
-                    WHERE broker_id = :broker_id AND name = :name AND id != :account_id
-                """),
-                {"broker_id": broker_id, "name": name, "account_id": account_id}
-            ).fetchone()
-            if existing:
-                raise HTTPException(status_code=409, detail="Account name already exists")
-
-        try:
-            db.execute(
-                text("""
-                    UPDATE broker_accounts
-                    SET name = :name, balance = :balance, leverage = :leverage
-                    WHERE id = :account_id
-                """),
-                {"name": name, "balance": balance, "leverage": leverage, "account_id": account_id}
-            )
-            db.commit()
-        except Exception:
-            db.rollback()
-            raise HTTPException(status_code=409, detail="Account name already exists")
-
-        return BrokerAccountResponse(id=account_id, name=name, balance=balance, leverage=leverage)
-    finally:
-        db.close()
-
-
-@router.delete("/{broker_id}/accounts/{account_id}")
-def delete_account(broker_id: int, account_id: int, authorization: str = Header(None)):
-    db, user = require_user(authorization)
-    try:
-        _fetch_row(db, broker_id, user[0])
-        db.execute(
-            text("DELETE FROM broker_orders WHERE account_id = :account_id AND broker_id = :broker_id"),
-            {"account_id": account_id, "broker_id": broker_id}
-        )
-        result = db.execute(
-            text("DELETE FROM broker_accounts WHERE id = :account_id AND broker_id = :broker_id"),
-            {"account_id": account_id, "broker_id": broker_id}
-        )
-        db.commit()
-        if result.rowcount == 0:
-            raise HTTPException(status_code=404, detail="Account not found")
-        return {"detail": "Account deleted"}
-    finally:
-        db.close()
-
-
-@router.get("/{broker_id}/accounts/{account_id}/orders", response_model=list[BrokerOrderResponse])
-def list_orders(
-    broker_id: int,
-    account_id: int,
-    status: str | None = Query(None),
-    limit: int = Query(200, ge=1, le=1000),
-    page: int = Query(1, ge=1),
-    authorization: str = Header(None)
-):
-    db, user = require_user(authorization)
-    try:
-        _fetch_row(db, broker_id, user[0])
-        account = db.execute(
-            text("SELECT id FROM broker_accounts WHERE id = :account_id AND broker_id = :broker_id"),
-            {"account_id": account_id, "broker_id": broker_id}
-        ).fetchone()
-        if not account:
-            raise HTTPException(status_code=404, detail="Account not found")
-
-        params = {"account_id": account_id, "limit": limit, "offset": (page - 1) * limit}
-        query = """
-            SELECT id, symbol, side, lots, entry_price, tp_price, sl_price,
-                   status, close_price, pnl, opened_at, closed_at
-            FROM broker_orders
-            WHERE account_id = :account_id
-        """
-        if status in ("open", "closed"):
-            query += " AND status = :status"
-            params["status"] = status
-        query += " ORDER BY id DESC LIMIT :limit OFFSET :offset"
-
-        rows = db.execute(text(query), params).fetchall()
-        return [
-            BrokerOrderResponse(
-                id=r[0],
-                symbol=r[1],
-                side=r[2],
-                lots=float(r[3]),
-                entry_price=float(r[4]),
-                tp_price=float(r[5]) if r[5] is not None else None,
-                sl_price=float(r[6]) if r[6] is not None else None,
-                status=r[7],
-                close_price=float(r[8]) if r[8] is not None else None,
-                pnl=float(r[9]) if r[9] is not None else None,
-                opened_at=str(r[10]),
-                closed_at=str(r[11]) if r[11] is not None else None
-            )
-            for r in rows
-        ]
     finally:
         db.close()

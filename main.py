@@ -39,6 +39,12 @@ app.include_router(alarms_router, prefix="/api/alarms", tags=["Alarms"])
 from app.api.routes.brokers import router as brokers_router
 app.include_router(brokers_router, prefix="/api/brokers", tags=["Brokers"])
 
+from app.api.routes.broker_accounts import router as broker_accounts_router
+app.include_router(broker_accounts_router, prefix="/api/brokers", tags=["Broker Accounts"])
+
+from app.api.routes.broker_orders import router as broker_orders_router
+app.include_router(broker_orders_router, prefix="/api/brokers", tags=["Broker Orders"])
+
 if CORS_ORIGINS:
     from fastapi.middleware.cors import CORSMiddleware
     app.add_middleware(
