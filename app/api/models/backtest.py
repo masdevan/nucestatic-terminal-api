@@ -66,6 +66,7 @@ class BacktestCandlesPageResponse(BaseModel):
 
 class BacktestOrderItem(BaseModel):
     local_id: str
+    ticket: int = 0
     symbol: str
     side: str
     order_type: str

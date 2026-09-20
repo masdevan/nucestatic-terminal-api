@@ -61,7 +61,8 @@ nucestatic-terminal-api
         │   ├── version_20260926_backtest_history_session.py
         │   ├── version_20260927_backtest_history_names.py
         │   ├── version_20260928_backtest_alarms.py
-        │   └── version_20260929_backtest_metrics.py
+        │   ├── version_20260929_backtest_metrics.py
+        │   └── version_20260930_backtest_order_tickets.py
         ├── models
         │   ├── alarm.py
         │   ├── bookmark.py

@@ -1,4 +1,5 @@
 import json
+import random
 from datetime import datetime
 from fastapi import APIRouter, Header, HTTPException, Query
 from sqlalchemy import text
@@ -65,6 +66,8 @@ def _validate_order(item: BacktestOrderItem) -> BacktestOrderItem:
     local_id = item.local_id.strip()
     if not local_id or len(local_id) > 40:
         raise HTTPException(status_code=422, detail="local_id must be 1-40 characters")
+    if not (10000000000 <= item.ticket <= 99999999999):
+        raise HTTPException(status_code=422, detail="ticket must be an 11 digit number")
     if item.side not in SIDES:
         raise HTTPException(status_code=422, detail="Invalid order side")
     if item.order_type not in ORDER_TYPES:
@@ -79,6 +82,7 @@ def _validate_order(item: BacktestOrderItem) -> BacktestOrderItem:
         raise HTTPException(status_code=422, detail="entry_price must be positive")
     return BacktestOrderItem(
         local_id=local_id,
+        ticket=item.ticket,
         symbol=_validate_symbol(item.symbol),
         side=item.side,
         order_type=item.order_type,
@@ -114,9 +118,27 @@ def _validate_alarm(item: BacktestAlarmItem) -> BacktestAlarmItem:
     )
 
 
+def _reroll_tickets(orders: list[BacktestOrderItem]) -> list[BacktestOrderItem]:
+    used: set[int] = set()
+    result: list[BacktestOrderItem] = []
+    for order in orders:
+        ticket = order.ticket
+        if ticket in used:
+            while True:
+                candidate = random.randint(10000000000, 99999999999)
+                if candidate not in used:
+                    break
+            ticket = candidate
+            order = order.model_copy(update={"ticket": ticket})
+        used.add(ticket)
+        result.append(order)
+    return result
+
+
 def _order_response(row) -> BacktestOrderItem:
     return BacktestOrderItem(
         local_id=row[0],
+        ticket=int(row[15]),
         symbol=row[1],
         side=row[2],
         order_type=row[3],
@@ -376,7 +398,8 @@ def get_trade_state(authorization: str = Header(None)):
         rows = db.execute(
             text("""
                 SELECT local_id, symbol, side, order_type, lots, entry_price, tp_price, sl_price,
-                       status, open_price, close_price, pnl, close_reason, opened_at, closed_at
+                       status, open_price, close_price, pnl, close_reason, opened_at, closed_at,
+                       ticket
                 FROM backtest_orders WHERE user_id = :user_id ORDER BY id
             """),
             {"user_id": user[0]}
@@ -393,7 +416,7 @@ def get_trade_state(authorization: str = Header(None)):
 def save_trade_state(req: BacktestTradeStateRequest, authorization: str = Header(None)):
     if len(req.orders) > MAX_ORDERS:
         raise HTTPException(status_code=422, detail=f"Orders limited to {MAX_ORDERS}")
-    orders = [_validate_order(item) for item in req.orders]
+    orders = _reroll_tickets([_validate_order(item) for item in req.orders])
 
     db, user = require_user(authorization)
     try:
@@ -405,11 +428,11 @@ def save_trade_state(req: BacktestTradeStateRequest, authorization: str = Header
             db.execute(
                 text("""
                     INSERT INTO backtest_orders
-                        (user_id, local_id, symbol, side, order_type, lots, entry_price,
+                        (user_id, local_id, ticket, symbol, side, order_type, lots, entry_price,
                          tp_price, sl_price, status, open_price, close_price, pnl, close_reason,
                          opened_at, closed_at)
                     VALUES
-                        (:user_id, :local_id, :symbol, :side, :order_type, :lots, :entry_price,
+                        (:user_id, :local_id, :ticket, :symbol, :side, :order_type, :lots, :entry_price,
                          :tp_price, :sl_price, :status, :open_price, :close_price, :pnl, :close_reason,
                          :opened_at, :closed_at)
                 """),
