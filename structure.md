@@ -55,7 +55,8 @@ nucestatic-terminal-api
         │   ├── version_20260920_brokers.py
         │   ├── version_20260921_broker_accounts.py
         │   ├── version_20260922_broker_orders.py
-        │   └── version_20260923_backtest.py
+        │   ├── version_20260923_backtest.py
+        │   └── version_20260924_backtest_trades.py
         ├── models
         │   ├── alarm.py
         │   ├── bookmark.py

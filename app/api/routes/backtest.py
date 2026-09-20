@@ -5,13 +5,21 @@ from app.api.models.backtest import (
     BacktestCandleBatchRequest,
     BacktestCandlesPageResponse,
     BacktestCandleResponse,
+    BacktestOrderItem,
     BacktestSessionRequest,
-    BacktestSessionResponse
+    BacktestSessionResponse,
+    BacktestTradeStateRequest,
+    BacktestTradeStateResponse
 )
 from app.api.controllers.auth import require_user
 
 router = APIRouter()
 MAX_BATCH = 5000
+MAX_ORDERS = 500
+SIDES = {"buy", "sell"}
+ORDER_TYPES = {"market", "limit", "stop"}
+ORDER_STATUSES = {"pending", "open", "closed"}
+CLOSE_REASONS = {"tp", "sl", "manual", "cancel"}
 
 
 def _validate_symbol(symbol: str) -> str:
@@ -42,17 +50,78 @@ def _fmt_time(value: datetime) -> str:
     return value.strftime("%Y-%m-%dT%H:%M:%S")
 
 
+def _fmt_time_opt(value) -> str | None:
+    return _fmt_time(value) if value is not None else None
+
+
+def _validate_order(item: BacktestOrderItem) -> BacktestOrderItem:
+    local_id = item.local_id.strip()
+    if not local_id or len(local_id) > 40:
+        raise HTTPException(status_code=422, detail="local_id must be 1-40 characters")
+    if item.side not in SIDES:
+        raise HTTPException(status_code=422, detail="Invalid order side")
+    if item.order_type not in ORDER_TYPES:
+        raise HTTPException(status_code=422, detail="Invalid order type")
+    if item.status not in ORDER_STATUSES:
+        raise HTTPException(status_code=422, detail="Invalid order status")
+    if item.close_reason is not None and item.close_reason not in CLOSE_REASONS:
+        raise HTTPException(status_code=422, detail="Invalid close reason")
+    if not (item.lots > 0):
+        raise HTTPException(status_code=422, detail="lots must be positive")
+    if not (item.entry_price > 0):
+        raise HTTPException(status_code=422, detail="entry_price must be positive")
+    return BacktestOrderItem(
+        local_id=local_id,
+        symbol=_validate_symbol(item.symbol),
+        side=item.side,
+        order_type=item.order_type,
+        lots=item.lots,
+        entry_price=item.entry_price,
+        tp_price=item.tp_price,
+        sl_price=item.sl_price,
+        status=item.status,
+        open_price=item.open_price,
+        close_price=item.close_price,
+        pnl=item.pnl,
+        close_reason=item.close_reason,
+        opened_at=_parse_time(item.opened_at) if item.opened_at else None,
+        closed_at=_parse_time(item.closed_at) if item.closed_at else None
+    )
+
+
+def _order_response(row) -> BacktestOrderItem:
+    return BacktestOrderItem(
+        local_id=row[0],
+        symbol=row[1],
+        side=row[2],
+        order_type=row[3],
+        lots=float(row[4]),
+        entry_price=float(row[5]),
+        tp_price=float(row[6]) if row[6] is not None else None,
+        sl_price=float(row[7]) if row[7] is not None else None,
+        status=row[8],
+        open_price=float(row[9]) if row[9] is not None else None,
+        close_price=float(row[10]) if row[10] is not None else None,
+        pnl=float(row[11]) if row[11] is not None else None,
+        close_reason=row[12],
+        opened_at=_fmt_time_opt(row[13]),
+        closed_at=_fmt_time_opt(row[14])
+    )
+
+
 def _session_response(row) -> BacktestSessionResponse:
     return BacktestSessionResponse(
         bridge_id=row[0],
-        symbol=row[1],
-        master_timeframe=row[2],
-        start_date=row[3],
-        tick_ms=int(row[4]),
-        cursor_time=int(row[5]),
-        end_time=int(row[6]) if row[6] is not None else None,
-        playing=bool(row[7]),
-        speed=float(row[8])
+        account_id=row[1],
+        symbol=row[2],
+        master_timeframe=row[3],
+        start_date=row[4],
+        tick_ms=int(row[5]),
+        cursor_time=int(row[6]),
+        end_time=int(row[7]) if row[7] is not None else None,
+        playing=bool(row[8]),
+        speed=float(row[9]),
+        balance=float(row[10])
     )
 
 
@@ -62,8 +131,8 @@ def get_session(authorization: str = Header(None)):
     try:
         row = db.execute(
             text("""
-                SELECT bridge_id, symbol, master_timeframe, start_date, tick_ms,
-                       cursor_time, end_time, playing, speed
+                SELECT bridge_id, account_id, symbol, master_timeframe, start_date, tick_ms,
+                       cursor_time, end_time, playing, speed, balance
                 FROM backtest_sessions WHERE user_id = :user_id
             """),
             {"user_id": user[0]}
@@ -90,6 +159,7 @@ def save_session(req: BacktestSessionRequest, authorization: str = Header(None))
         params = {
             "user_id": user[0],
             "bridge_id": req.bridge_id,
+            "account_id": req.account_id,
             "symbol": symbol,
             "master_timeframe": timeframe,
             "start_date": start_date,
@@ -97,18 +167,20 @@ def save_session(req: BacktestSessionRequest, authorization: str = Header(None))
             "cursor_time": req.cursor_time,
             "end_time": req.end_time,
             "playing": 1 if req.playing else 0,
-            "speed": req.speed
+            "speed": req.speed,
+            "balance": req.balance
         }
         db.execute(
             text("""
                 INSERT INTO backtest_sessions
-                    (user_id, bridge_id, symbol, master_timeframe, start_date, tick_ms,
-                     cursor_time, end_time, playing, speed)
+                    (user_id, bridge_id, account_id, symbol, master_timeframe, start_date, tick_ms,
+                     cursor_time, end_time, playing, speed, balance)
                 VALUES
-                    (:user_id, :bridge_id, :symbol, :master_timeframe, :start_date, :tick_ms,
-                     :cursor_time, :end_time, :playing, :speed)
+                    (:user_id, :bridge_id, :account_id, :symbol, :master_timeframe, :start_date, :tick_ms,
+                     :cursor_time, :end_time, :playing, :speed, :balance)
                 ON DUPLICATE KEY UPDATE
                     bridge_id = VALUES(bridge_id),
+                    account_id = VALUES(account_id),
                     symbol = VALUES(symbol),
                     master_timeframe = VALUES(master_timeframe),
                     start_date = VALUES(start_date),
@@ -116,13 +188,15 @@ def save_session(req: BacktestSessionRequest, authorization: str = Header(None))
                     cursor_time = VALUES(cursor_time),
                     end_time = VALUES(end_time),
                     playing = VALUES(playing),
-                    speed = VALUES(speed)
+                    speed = VALUES(speed),
+                    balance = VALUES(balance)
             """),
             params
         )
         db.commit()
         return BacktestSessionResponse(
             bridge_id=req.bridge_id,
+            account_id=req.account_id,
             symbol=symbol,
             master_timeframe=timeframe,
             start_date=start_date,
@@ -130,7 +204,8 @@ def save_session(req: BacktestSessionRequest, authorization: str = Header(None))
             cursor_time=req.cursor_time,
             end_time=req.end_time,
             playing=req.playing,
-            speed=req.speed
+            speed=req.speed,
+            balance=req.balance
         )
     finally:
         db.close()
@@ -140,17 +215,16 @@ def save_session(req: BacktestSessionRequest, authorization: str = Header(None))
 def delete_session(authorization: str = Header(None)):
     db, user = require_user(authorization)
     try:
-        row = db.execute(
-            text("SELECT 1 FROM backtest_sessions WHERE user_id = :user_id"),
+        db.execute(
+            text("DELETE FROM backtest_candles WHERE user_id = :user_id"),
             {"user_id": user[0]}
-        ).fetchone()
-        if row:
-            db.execute(
-                text("DELETE FROM backtest_candles WHERE user_id = :user_id"),
-                {"user_id": user[0]}
-            )
-            db.execute(text("DELETE FROM backtest_sessions WHERE user_id = :user_id"), {"user_id": user[0]})
-            db.commit()
+        )
+        db.execute(
+            text("DELETE FROM backtest_orders WHERE user_id = :user_id"),
+            {"user_id": user[0]}
+        )
+        db.execute(text("DELETE FROM backtest_sessions WHERE user_id = :user_id"), {"user_id": user[0]})
+        db.commit()
         return {"detail": "Backtest session deleted"}
     finally:
         db.close()
@@ -243,5 +317,65 @@ def save_candles(req: BacktestCandleBatchRequest, authorization: str = Header(No
         )
         db.commit()
         return {"detail": "Candles saved", "count": len(rows)}
+    finally:
+        db.close()
+
+
+@router.get("/trade-state", response_model=BacktestTradeStateResponse)
+def get_trade_state(authorization: str = Header(None)):
+    db, user = require_user(authorization)
+    try:
+        session_row = db.execute(
+            text("SELECT balance FROM backtest_sessions WHERE user_id = :user_id"),
+            {"user_id": user[0]}
+        ).fetchone()
+        rows = db.execute(
+            text("""
+                SELECT local_id, symbol, side, order_type, lots, entry_price, tp_price, sl_price,
+                       status, open_price, close_price, pnl, close_reason, opened_at, closed_at
+                FROM backtest_orders WHERE user_id = :user_id ORDER BY id
+            """),
+            {"user_id": user[0]}
+        ).fetchall()
+        return BacktestTradeStateResponse(
+            balance=float(session_row[0]) if session_row else 0,
+            orders=[_order_response(row) for row in rows]
+        )
+    finally:
+        db.close()
+
+
+@router.put("/trade-state", response_model=BacktestTradeStateResponse)
+def save_trade_state(req: BacktestTradeStateRequest, authorization: str = Header(None)):
+    if len(req.orders) > MAX_ORDERS:
+        raise HTTPException(status_code=422, detail=f"Orders limited to {MAX_ORDERS}")
+    orders = [_validate_order(item) for item in req.orders]
+
+    db, user = require_user(authorization)
+    try:
+        db.execute(
+            text("DELETE FROM backtest_orders WHERE user_id = :user_id"),
+            {"user_id": user[0]}
+        )
+        if orders:
+            db.execute(
+                text("""
+                    INSERT INTO backtest_orders
+                        (user_id, local_id, symbol, side, order_type, lots, entry_price,
+                         tp_price, sl_price, status, open_price, close_price, pnl, close_reason,
+                         opened_at, closed_at)
+                    VALUES
+                        (:user_id, :local_id, :symbol, :side, :order_type, :lots, :entry_price,
+                         :tp_price, :sl_price, :status, :open_price, :close_price, :pnl, :close_reason,
+                         :opened_at, :closed_at)
+                """),
+                [{**order.model_dump(), "user_id": user[0]} for order in orders]
+            )
+        db.execute(
+            text("UPDATE backtest_sessions SET balance = :balance WHERE user_id = :user_id"),
+            {"balance": req.balance, "user_id": user[0]}
+        )
+        db.commit()
+        return BacktestTradeStateResponse(balance=req.balance, orders=orders)
     finally:
         db.close()
