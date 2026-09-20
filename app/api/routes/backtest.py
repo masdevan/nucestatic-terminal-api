@@ -117,15 +117,18 @@ def _session_response(row) -> BacktestSessionResponse:
     return BacktestSessionResponse(
         bridge_id=row[0],
         account_id=row[1],
-        symbol=row[2],
-        master_timeframe=row[3],
-        start_date=row[4],
-        tick_ms=int(row[5]),
-        cursor_time=int(row[6]),
-        end_time=int(row[7]) if row[7] is not None else None,
-        playing=bool(row[8]),
-        speed=float(row[9]),
-        balance=float(row[10])
+        broker_id=row[2],
+        broker_name=row[3],
+        account_name=row[4],
+        symbol=row[5],
+        master_timeframe=row[6],
+        start_date=row[7],
+        tick_ms=int(row[8]),
+        cursor_time=int(row[9]),
+        end_time=int(row[10]) if row[10] is not None else None,
+        playing=bool(row[11]),
+        speed=float(row[12]),
+        balance=float(row[13])
     )
 
 
@@ -135,7 +138,8 @@ def get_session(authorization: str = Header(None)):
     try:
         row = db.execute(
             text("""
-                SELECT bridge_id, account_id, symbol, master_timeframe, start_date, tick_ms,
+                SELECT bridge_id, account_id, broker_id, broker_name, account_name,
+                       symbol, master_timeframe, start_date, tick_ms,
                        cursor_time, end_time, playing, speed, balance
                 FROM backtest_sessions WHERE user_id = :user_id
             """),
@@ -164,6 +168,9 @@ def save_session(req: BacktestSessionRequest, authorization: str = Header(None))
             "user_id": user[0],
             "bridge_id": req.bridge_id,
             "account_id": req.account_id,
+            "broker_id": req.broker_id,
+            "broker_name": req.broker_name,
+            "account_name": req.account_name,
             "symbol": symbol,
             "master_timeframe": timeframe,
             "start_date": start_date,
@@ -177,14 +184,19 @@ def save_session(req: BacktestSessionRequest, authorization: str = Header(None))
         db.execute(
             text("""
                 INSERT INTO backtest_sessions
-                    (user_id, bridge_id, account_id, symbol, master_timeframe, start_date, tick_ms,
+                    (user_id, bridge_id, account_id, broker_id, broker_name, account_name,
+                     symbol, master_timeframe, start_date, tick_ms,
                      cursor_time, end_time, playing, speed, balance)
                 VALUES
-                    (:user_id, :bridge_id, :account_id, :symbol, :master_timeframe, :start_date, :tick_ms,
+                    (:user_id, :bridge_id, :account_id, :broker_id, :broker_name, :account_name,
+                     :symbol, :master_timeframe, :start_date, :tick_ms,
                      :cursor_time, :end_time, :playing, :speed, :balance)
                 ON DUPLICATE KEY UPDATE
                     bridge_id = VALUES(bridge_id),
                     account_id = VALUES(account_id),
+                    broker_id = VALUES(broker_id),
+                    broker_name = VALUES(broker_name),
+                    account_name = VALUES(account_name),
                     symbol = VALUES(symbol),
                     master_timeframe = VALUES(master_timeframe),
                     start_date = VALUES(start_date),
@@ -201,6 +213,9 @@ def save_session(req: BacktestSessionRequest, authorization: str = Header(None))
         return BacktestSessionResponse(
             bridge_id=req.bridge_id,
             account_id=req.account_id,
+            broker_id=req.broker_id,
+            broker_name=req.broker_name,
+            account_name=req.account_name,
             symbol=symbol,
             master_timeframe=timeframe,
             start_date=start_date,
@@ -392,13 +407,16 @@ def _history_response(row, session_number: int = 0) -> BacktestHistoryResponse:
         symbol=row[1],
         master_timeframe=row[2],
         account_id=int(row[3]),
-        bridge_id=int(row[4]),
-        start_date=row[5],
-        initial_balance=float(row[6]),
-        final_balance=float(row[7]),
-        first_trade_at=_fmt_time_opt(row[8]),
-        last_trade_at=_fmt_time_opt(row[9]),
-        created_at=_fmt_time(row[10])
+        broker_id=int(row[4]),
+        broker_name=row[5],
+        account_name=row[6],
+        bridge_id=int(row[7]),
+        start_date=row[8],
+        initial_balance=float(row[9]),
+        final_balance=float(row[10]),
+        first_trade_at=_fmt_time_opt(row[11]),
+        last_trade_at=_fmt_time_opt(row[12]),
+        created_at=_fmt_time(row[13])
     )
 
 
@@ -423,17 +441,22 @@ def save_history(req: BacktestHistoryRequest, authorization: str = Header(None))
         result = db.execute(
             text("""
                 INSERT INTO backtest_history
-                    (user_id, symbol, master_timeframe, account_id, bridge_id, start_date,
-                     session_number, initial_balance, final_balance, orders, first_trade_at, last_trade_at)
+                    (user_id, symbol, master_timeframe, account_id, broker_id, broker_name,
+                     account_name, bridge_id, start_date, session_number,
+                     initial_balance, final_balance, orders, first_trade_at, last_trade_at)
                 VALUES
-                    (:user_id, :symbol, :master_timeframe, :account_id, :bridge_id, :start_date,
-                     :session_number, :initial_balance, :final_balance, :orders, :first_trade_at, :last_trade_at)
+                    (:user_id, :symbol, :master_timeframe, :account_id, :broker_id, :broker_name,
+                     :account_name, :bridge_id, :start_date, :session_number,
+                     :initial_balance, :final_balance, :orders, :first_trade_at, :last_trade_at)
             """),
             {
                 "user_id": user[0],
                 "symbol": symbol,
                 "master_timeframe": timeframe,
                 "account_id": req.account_id,
+                "broker_id": req.broker_id,
+                "broker_name": req.broker_name,
+                "account_name": req.account_name,
                 "bridge_id": req.bridge_id,
                 "start_date": start_date,
                 "session_number": int(session_number),
@@ -447,14 +470,14 @@ def save_history(req: BacktestHistoryRequest, authorization: str = Header(None))
         db.commit()
         saved = db.execute(
             text("""
-                SELECT id, symbol, master_timeframe, account_id, bridge_id, start_date,
-                       initial_balance, final_balance, first_trade_at, last_trade_at, created_at,
-                       session_number
+                SELECT id, symbol, master_timeframe, account_id, broker_id, broker_name,
+                       account_name, bridge_id, start_date, initial_balance, final_balance,
+                       first_trade_at, last_trade_at, created_at, session_number
                 FROM backtest_history WHERE id = :history_id
             """),
             {"history_id": result.lastrowid}
         ).fetchone()
-        return _history_response(saved, int(saved[11]))
+        return _history_response(saved, int(saved[14]))
     finally:
         db.close()
 
@@ -465,14 +488,14 @@ def list_history(authorization: str = Header(None)):
     try:
         rows = db.execute(
             text("""
-                SELECT id, symbol, master_timeframe, account_id, bridge_id, start_date,
-                       initial_balance, final_balance, first_trade_at, last_trade_at, created_at,
-                       session_number
+                SELECT id, symbol, master_timeframe, account_id, broker_id, broker_name,
+                       account_name, bridge_id, start_date, initial_balance, final_balance,
+                       first_trade_at, last_trade_at, created_at, session_number
                 FROM backtest_history WHERE user_id = :user_id ORDER BY id DESC LIMIT 100
             """),
             {"user_id": user[0]}
         ).fetchall()
-        return [_history_response(row, int(row[11])) for row in rows]
+        return [_history_response(row, int(row[14])) for row in rows]
     finally:
         db.close()
 
@@ -483,9 +506,9 @@ def get_history(history_id: int, authorization: str = Header(None)):
     try:
         row = db.execute(
             text("""
-                SELECT id, symbol, master_timeframe, account_id, bridge_id, start_date,
-                       initial_balance, final_balance, first_trade_at, last_trade_at, created_at,
-                       session_number,
+                SELECT id, symbol, master_timeframe, account_id, broker_id, broker_name,
+                       account_name, bridge_id, start_date, initial_balance, final_balance,
+                       first_trade_at, last_trade_at, created_at, session_number,
                        orders
                 FROM backtest_history WHERE id = :history_id AND user_id = :user_id
             """),
@@ -493,8 +516,8 @@ def get_history(history_id: int, authorization: str = Header(None)):
         ).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="History not found")
-        header = _history_response(row, int(row[11]))
-        stored = json.loads(row[12])
+        header = _history_response(row, int(row[14]))
+        stored = json.loads(row[15])
         return BacktestHistoryDetailResponse(
             **header.model_dump(),
             orders=[BacktestOrderItem(**item) for item in stored]

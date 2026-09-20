@@ -4,6 +4,9 @@ from pydantic import BaseModel
 class BacktestSessionRequest(BaseModel):
     bridge_id: int = 0
     account_id: int = 0
+    broker_id: int = 0
+    broker_name: str = ""
+    account_name: str = ""
     symbol: str
     master_timeframe: str
     start_date: str
@@ -18,6 +21,9 @@ class BacktestSessionRequest(BaseModel):
 class BacktestSessionResponse(BaseModel):
     bridge_id: int
     account_id: int
+    broker_id: int = 0
+    broker_name: str = ""
+    account_name: str = ""
     symbol: str
     master_timeframe: str
     start_date: str
@@ -90,6 +96,9 @@ class BacktestHistoryRequest(BaseModel):
     symbol: str
     master_timeframe: str
     account_id: int = 0
+    broker_id: int = 0
+    broker_name: str = ""
+    account_name: str = ""
     bridge_id: int = 0
     start_date: str
     initial_balance: float
@@ -103,6 +112,9 @@ class BacktestHistoryResponse(BaseModel):
     symbol: str
     master_timeframe: str
     account_id: int
+    broker_id: int = 0
+    broker_name: str = ""
+    account_name: str = ""
     bridge_id: int
     start_date: str
     initial_balance: float
