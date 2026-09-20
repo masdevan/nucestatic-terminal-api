@@ -14,6 +14,7 @@ class AlarmResponse(BaseModel):
     is_read: bool = False
     created_at: datetime | None = None
     webhook_url: str | None = None
+    backtest: bool = False
 
 
 class AlarmCreateRequest(BaseModel):
@@ -25,3 +26,4 @@ class AlarmCreateRequest(BaseModel):
     sl_price: float | None = None
     timeframe: str | None = None
     webhook: str | None = None
+    backtest: bool = False

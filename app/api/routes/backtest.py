@@ -3,6 +3,7 @@ from datetime import datetime
 from fastapi import APIRouter, Header, HTTPException, Query
 from sqlalchemy import text
 from app.api.models.backtest import (
+    BacktestAlarmItem,
     BacktestCandleBatchRequest,
     BacktestCandlesPageResponse,
     BacktestCandleResponse,
@@ -20,6 +21,7 @@ from app.api.controllers.auth import require_user
 router = APIRouter()
 MAX_BATCH = 5000
 MAX_ORDERS = 500
+MAX_ALARMS = 500
 SIDES = {"buy", "sell"}
 ORDER_TYPES = {"market", "limit", "stop"}
 ORDER_STATUSES = {"pending", "open", "closed"}
@@ -90,6 +92,24 @@ def _validate_order(item: BacktestOrderItem) -> BacktestOrderItem:
         close_reason=item.close_reason,
         opened_at=_parse_time(item.opened_at) if item.opened_at else None,
         closed_at=_parse_time(item.closed_at) if item.closed_at else None
+    )
+
+
+def _validate_alarm(item: BacktestAlarmItem) -> BacktestAlarmItem:
+    entry_type = item.entry_type.strip().lower()
+    if entry_type not in SIDES:
+        raise HTTPException(status_code=422, detail="Invalid alarm entry type")
+    if not (item.entry_price > 0):
+        raise HTTPException(status_code=422, detail="entry_price must be positive")
+    return BacktestAlarmItem(
+        entry_type=entry_type,
+        symbol=_validate_symbol(item.symbol),
+        description=(item.description or "").strip()[:500] or None,
+        entry_price=item.entry_price,
+        tp_price=item.tp_price,
+        sl_price=item.sl_price,
+        timeframe=(item.timeframe or "").strip().upper()[:10] or None,
+        sim_time=_parse_time(item.sim_time) if item.sim_time else None
     )
 
 
@@ -240,6 +260,10 @@ def delete_session(authorization: str = Header(None)):
         )
         db.execute(
             text("DELETE FROM backtest_orders WHERE user_id = :user_id"),
+            {"user_id": user[0]}
+        )
+        db.execute(
+            text("DELETE FROM alarms WHERE user_id = :user_id AND backtest = 1"),
             {"user_id": user[0]}
         )
         db.execute(text("DELETE FROM backtest_sessions WHERE user_id = :user_id"), {"user_id": user[0]})
@@ -400,7 +424,7 @@ def save_trade_state(req: BacktestTradeStateRequest, authorization: str = Header
         db.close()
 
 
-def _history_response(row, session_number: int = 0) -> BacktestHistoryResponse:
+def _history_response(row, session_number: int = 0, alarm_count: int = 0) -> BacktestHistoryResponse:
     return BacktestHistoryResponse(
         id=int(row[0]),
         session_number=session_number,
@@ -416,7 +440,8 @@ def _history_response(row, session_number: int = 0) -> BacktestHistoryResponse:
         final_balance=float(row[10]),
         first_trade_at=_fmt_time_opt(row[11]),
         last_trade_at=_fmt_time_opt(row[12]),
-        created_at=_fmt_time(row[13])
+        created_at=_fmt_time(row[13]),
+        alarm_count=alarm_count
     )
 
 
@@ -429,7 +454,10 @@ def save_history(req: BacktestHistoryRequest, authorization: str = Header(None))
         raise HTTPException(status_code=422, detail="start_date must use YYYY-MM-DD")
     if len(req.orders) > MAX_ORDERS:
         raise HTTPException(status_code=422, detail=f"Orders limited to {MAX_ORDERS}")
+    if len(req.alarms) > MAX_ALARMS:
+        raise HTTPException(status_code=422, detail=f"Alarms limited to {MAX_ALARMS}")
     orders = [_validate_order(item) for item in req.orders]
+    alarms = [_validate_alarm(item) for item in req.alarms]
     trade_times = sorted(order.opened_at for order in orders if order.opened_at)
 
     db, user = require_user(authorization)
@@ -443,11 +471,11 @@ def save_history(req: BacktestHistoryRequest, authorization: str = Header(None))
                 INSERT INTO backtest_history
                     (user_id, symbol, master_timeframe, account_id, broker_id, broker_name,
                      account_name, bridge_id, start_date, session_number,
-                     initial_balance, final_balance, orders, first_trade_at, last_trade_at)
+                     initial_balance, final_balance, orders, alarms, alarm_count, first_trade_at, last_trade_at)
                 VALUES
                     (:user_id, :symbol, :master_timeframe, :account_id, :broker_id, :broker_name,
                      :account_name, :bridge_id, :start_date, :session_number,
-                     :initial_balance, :final_balance, :orders, :first_trade_at, :last_trade_at)
+                     :initial_balance, :final_balance, :orders, :alarms, :alarm_count, :first_trade_at, :last_trade_at)
             """),
             {
                 "user_id": user[0],
@@ -463,6 +491,8 @@ def save_history(req: BacktestHistoryRequest, authorization: str = Header(None))
                 "initial_balance": req.initial_balance,
                 "final_balance": req.final_balance,
                 "orders": json.dumps([order.model_dump() for order in orders]),
+                "alarms": json.dumps([alarm.model_dump() for alarm in alarms]),
+                "alarm_count": len(alarms),
                 "first_trade_at": trade_times[0] if trade_times else None,
                 "last_trade_at": trade_times[-1] if trade_times else None
             }
@@ -472,12 +502,12 @@ def save_history(req: BacktestHistoryRequest, authorization: str = Header(None))
             text("""
                 SELECT id, symbol, master_timeframe, account_id, broker_id, broker_name,
                        account_name, bridge_id, start_date, initial_balance, final_balance,
-                       first_trade_at, last_trade_at, created_at, session_number
+                       first_trade_at, last_trade_at, created_at, session_number, alarm_count
                 FROM backtest_history WHERE id = :history_id
             """),
             {"history_id": result.lastrowid}
         ).fetchone()
-        return _history_response(saved, int(saved[14]))
+        return _history_response(saved, int(saved[14]), int(saved[15]))
     finally:
         db.close()
 
@@ -490,12 +520,12 @@ def list_history(authorization: str = Header(None)):
             text("""
                 SELECT id, symbol, master_timeframe, account_id, broker_id, broker_name,
                        account_name, bridge_id, start_date, initial_balance, final_balance,
-                       first_trade_at, last_trade_at, created_at, session_number
+                       first_trade_at, last_trade_at, created_at, session_number, alarm_count
                 FROM backtest_history WHERE user_id = :user_id ORDER BY id DESC LIMIT 100
             """),
             {"user_id": user[0]}
         ).fetchall()
-        return [_history_response(row, int(row[14])) for row in rows]
+        return [_history_response(row, int(row[14]), int(row[15])) for row in rows]
     finally:
         db.close()
 
@@ -508,19 +538,21 @@ def get_history(history_id: int, authorization: str = Header(None)):
             text("""
                 SELECT id, symbol, master_timeframe, account_id, broker_id, broker_name,
                        account_name, bridge_id, start_date, initial_balance, final_balance,
-                       first_trade_at, last_trade_at, created_at, session_number,
-                       orders
+                       first_trade_at, last_trade_at, created_at, session_number, alarm_count,
+                       orders, alarms
                 FROM backtest_history WHERE id = :history_id AND user_id = :user_id
             """),
             {"history_id": history_id, "user_id": user[0]}
         ).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="History not found")
-        header = _history_response(row, int(row[14]))
-        stored = json.loads(row[15])
+        header = _history_response(row, int(row[14]), int(row[15]))
+        stored_orders = json.loads(row[16])
+        stored_alarms = json.loads(row[17]) if row[17] else []
         return BacktestHistoryDetailResponse(
             **header.model_dump(),
-            orders=[BacktestOrderItem(**item) for item in stored]
+            orders=[BacktestOrderItem(**item) for item in stored_orders],
+            alarms=[BacktestAlarmItem(**item) for item in stored_alarms]
         )
     finally:
         db.close()

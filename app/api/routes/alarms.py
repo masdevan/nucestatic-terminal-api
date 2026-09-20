@@ -55,7 +55,8 @@ def _row_to_response(r) -> AlarmResponse:
         timeframe=r[7],
         is_read=bool(r[8]),
         created_at=r[9],
-        webhook_url=r[10]
+        webhook_url=r[10],
+        backtest=bool(r[11])
     )
 
 
@@ -108,7 +109,7 @@ def list_alarms(
             {"user_id": row[0]}
         ).scalar()
         rows = db.execute(
-            text("SELECT id, symbol, description, entry_type, entry_price, tp_price, sl_price, timeframe, is_read, created_at, webhook_url FROM alarms WHERE user_id = :user_id ORDER BY is_read ASC, id DESC LIMIT :limit OFFSET :offset"),
+            text("SELECT id, symbol, description, entry_type, entry_price, tp_price, sl_price, timeframe, is_read, created_at, webhook_url, backtest FROM alarms WHERE user_id = :user_id ORDER BY is_read ASC, id DESC LIMIT :limit OFFSET :offset"),
             {"user_id": row[0], "limit": limit, "offset": (page - 1) * limit}
         ).fetchall()
         total_pages = (total + limit - 1) // limit if total > 0 else 1
@@ -146,14 +147,14 @@ def create_alarm(req: AlarmCreateRequest, background: BackgroundTasks, authoriza
     timeframe = (req.timeframe or "").strip().upper() or None
     if timeframe is not None and len(timeframe) > 10:
         raise HTTPException(status_code=422, detail="timeframe must be at most 10 characters")
-    webhook_url = _clean_url(req.webhook)
+    webhook_url = None if req.backtest else _clean_url(req.webhook)
 
     db, row = require_user(authorization)
     try:
         inserted = db.execute(
             text("""
-                INSERT INTO alarms (user_id, symbol, description, entry_type, entry_price, tp_price, sl_price, timeframe, webhook_url)
-                VALUES (:user_id, :symbol, :description, :entry_type, :entry_price, :tp_price, :sl_price, :timeframe, :webhook_url)
+                INSERT INTO alarms (user_id, symbol, description, entry_type, entry_price, tp_price, sl_price, timeframe, webhook_url, backtest)
+                VALUES (:user_id, :symbol, :description, :entry_type, :entry_price, :tp_price, :sl_price, :timeframe, :webhook_url, :backtest)
             """),
             {
                 "user_id": row[0],
@@ -164,13 +165,14 @@ def create_alarm(req: AlarmCreateRequest, background: BackgroundTasks, authoriza
                 "tp_price": tp_price,
                 "sl_price": sl_price,
                 "timeframe": timeframe,
-                "webhook_url": webhook_url
+                "webhook_url": webhook_url,
+                "backtest": 1 if req.backtest else 0
             }
         )
         alarm_id = inserted.lastrowid
         db.commit()
         result = db.execute(
-            text("SELECT id, symbol, description, entry_type, entry_price, tp_price, sl_price, timeframe, is_read, created_at, webhook_url FROM alarms WHERE id = :alarm_id"),
+            text("SELECT id, symbol, description, entry_type, entry_price, tp_price, sl_price, timeframe, is_read, created_at, webhook_url, backtest FROM alarms WHERE id = :alarm_id"),
             {"alarm_id": alarm_id}
         ).fetchone()
         alarm = _row_to_response(result)
@@ -221,6 +223,20 @@ def delete_all_alarms(authorization: str = Header(None)):
         )
         db.commit()
         return {"detail": f"{result.rowcount} alarm(s) deleted"}
+    finally:
+        db.close()
+
+
+@router.delete("/backtest")
+def delete_backtest_alarms(authorization: str = Header(None)):
+    db, row = require_user(authorization)
+    try:
+        result = db.execute(
+            text("DELETE FROM alarms WHERE user_id = :user_id AND backtest = 1"),
+            {"user_id": row[0]}
+        )
+        db.commit()
+        return {"detail": f"{result.rowcount} backtest alarm(s) deleted"}
     finally:
         db.close()
 

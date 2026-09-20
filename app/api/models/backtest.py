@@ -92,6 +92,17 @@ class BacktestTradeStateResponse(BaseModel):
     orders: list[BacktestOrderItem] = []
 
 
+class BacktestAlarmItem(BaseModel):
+    entry_type: str
+    symbol: str
+    description: str | None = None
+    entry_price: float
+    tp_price: float | None = None
+    sl_price: float | None = None
+    timeframe: str | None = None
+    sim_time: str | None = None
+
+
 class BacktestHistoryRequest(BaseModel):
     symbol: str
     master_timeframe: str
@@ -104,6 +115,7 @@ class BacktestHistoryRequest(BaseModel):
     initial_balance: float
     final_balance: float
     orders: list[BacktestOrderItem] = []
+    alarms: list[BacktestAlarmItem] = []
 
 
 class BacktestHistoryResponse(BaseModel):
@@ -122,7 +134,9 @@ class BacktestHistoryResponse(BaseModel):
     first_trade_at: str | None = None
     last_trade_at: str | None = None
     created_at: str
+    alarm_count: int = 0
 
 
 class BacktestHistoryDetailResponse(BacktestHistoryResponse):
     orders: list[BacktestOrderItem] = []
+    alarms: list[BacktestAlarmItem] = []
