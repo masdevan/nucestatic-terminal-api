@@ -25,7 +25,7 @@ MAX_ALARMS = 500
 SIDES = {"buy", "sell"}
 ORDER_TYPES = {"market", "limit", "stop"}
 ORDER_STATUSES = {"pending", "open", "closed"}
-CLOSE_REASONS = {"tp", "sl", "manual", "cancel"}
+CLOSE_REASONS = {"tp", "sl", "manual", "cancel", "margin"}
 
 
 def _validate_symbol(symbol: str) -> str:
