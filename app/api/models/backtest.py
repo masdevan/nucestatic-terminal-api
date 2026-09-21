@@ -8,6 +8,7 @@ class BacktestSessionRequest(BaseModel):
     broker_name: str = ""
     account_name: str = ""
     symbol: str
+    provider: str = ""
     master_timeframe: str
     start_date: str
     tick_ms: int
@@ -25,6 +26,7 @@ class BacktestSessionResponse(BaseModel):
     broker_name: str = ""
     account_name: str = ""
     symbol: str
+    provider: str = ""
     master_timeframe: str
     start_date: str
     tick_ms: int

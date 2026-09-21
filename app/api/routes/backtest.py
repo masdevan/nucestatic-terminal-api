@@ -44,6 +44,13 @@ def _validate_timeframe(timeframe: str) -> str:
     return value
 
 
+def _validate_provider(provider: str) -> str:
+    value = provider.strip()
+    if len(value) > 100:
+        raise HTTPException(status_code=422, detail="Provider must be at most 100 characters")
+    return value
+
+
 def _parse_time(value: str) -> str:
     normalized = value.strip().replace("T", " ")
     for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
@@ -164,14 +171,15 @@ def _session_response(row) -> BacktestSessionResponse:
         broker_name=row[3],
         account_name=row[4],
         symbol=row[5],
-        master_timeframe=row[6],
-        start_date=row[7],
-        tick_ms=int(row[8]),
-        cursor_time=int(row[9]),
-        end_time=int(row[10]) if row[10] is not None else None,
-        playing=bool(row[11]),
-        speed=float(row[12]),
-        balance=float(row[13])
+        provider=row[6],
+        master_timeframe=row[7],
+        start_date=row[8],
+        tick_ms=int(row[9]),
+        cursor_time=int(row[10]),
+        end_time=int(row[11]) if row[11] is not None else None,
+        playing=bool(row[12]),
+        speed=float(row[13]),
+        balance=float(row[14])
     )
 
 
@@ -182,7 +190,7 @@ def get_session(authorization: str = Header(None)):
         row = db.execute(
             text("""
                 SELECT bridge_id, account_id, broker_id, broker_name, account_name,
-                       symbol, master_timeframe, start_date, tick_ms,
+                       symbol, provider, master_timeframe, start_date, tick_ms,
                        cursor_time, end_time, playing, speed, balance
                 FROM backtest_sessions WHERE user_id = :user_id
             """),
@@ -196,6 +204,7 @@ def get_session(authorization: str = Header(None)):
 @router.put("/session", response_model=BacktestSessionResponse)
 def save_session(req: BacktestSessionRequest, authorization: str = Header(None)):
     symbol = _validate_symbol(req.symbol)
+    provider = _validate_provider(req.provider)
     timeframe = _validate_timeframe(req.master_timeframe)
     start_date = req.start_date.strip()
     if len(start_date) != 10:
@@ -215,6 +224,7 @@ def save_session(req: BacktestSessionRequest, authorization: str = Header(None))
             "broker_name": req.broker_name,
             "account_name": req.account_name,
             "symbol": symbol,
+            "provider": provider,
             "master_timeframe": timeframe,
             "start_date": start_date,
             "tick_ms": req.tick_ms,
@@ -228,11 +238,11 @@ def save_session(req: BacktestSessionRequest, authorization: str = Header(None))
             text("""
                 INSERT INTO backtest_sessions
                     (user_id, bridge_id, account_id, broker_id, broker_name, account_name,
-                     symbol, master_timeframe, start_date, tick_ms,
+                     symbol, provider, master_timeframe, start_date, tick_ms,
                      cursor_time, end_time, playing, speed, balance)
                 VALUES
                     (:user_id, :bridge_id, :account_id, :broker_id, :broker_name, :account_name,
-                     :symbol, :master_timeframe, :start_date, :tick_ms,
+                     :symbol, :provider, :master_timeframe, :start_date, :tick_ms,
                      :cursor_time, :end_time, :playing, :speed, :balance)
                 ON DUPLICATE KEY UPDATE
                     bridge_id = VALUES(bridge_id),
@@ -241,6 +251,7 @@ def save_session(req: BacktestSessionRequest, authorization: str = Header(None))
                     broker_name = VALUES(broker_name),
                     account_name = VALUES(account_name),
                     symbol = VALUES(symbol),
+                    provider = VALUES(provider),
                     master_timeframe = VALUES(master_timeframe),
                     start_date = VALUES(start_date),
                     tick_ms = VALUES(tick_ms),
@@ -260,6 +271,7 @@ def save_session(req: BacktestSessionRequest, authorization: str = Header(None))
             broker_name=req.broker_name,
             account_name=req.account_name,
             symbol=symbol,
+            provider=provider,
             master_timeframe=timeframe,
             start_date=start_date,
             tick_ms=req.tick_ms,
