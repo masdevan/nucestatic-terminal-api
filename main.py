@@ -45,8 +45,17 @@ app.include_router(broker_accounts_router, prefix="/api/brokers", tags=["Broker 
 from app.api.routes.broker_orders import router as broker_orders_router
 app.include_router(broker_orders_router, prefix="/api/brokers", tags=["Broker Orders"])
 
-from app.api.routes.backtest import router as backtest_router
-app.include_router(backtest_router, prefix="/api/backtest", tags=["Backtest"])
+from app.api.routes.backtest_sessions import router as backtest_sessions_router
+app.include_router(backtest_sessions_router, prefix="/api/backtest", tags=["Backtest Sessions"])
+
+from app.api.routes.backtest_candles import router as backtest_candles_router
+app.include_router(backtest_candles_router, prefix="/api/backtest", tags=["Backtest Candles"])
+
+from app.api.routes.backtest_trade_state import router as backtest_trade_state_router
+app.include_router(backtest_trade_state_router, prefix="/api/backtest", tags=["Backtest Trade State"])
+
+from app.api.routes.backtest_history import router as backtest_history_router
+app.include_router(backtest_history_router, prefix="/api/backtest", tags=["Backtest History"])
 
 if CORS_ORIGINS:
     from fastapi.middleware.cors import CORSMiddleware
