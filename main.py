@@ -57,6 +57,24 @@ app.include_router(backtest_trade_state_router, prefix="/api/backtest", tags=["B
 from app.api.routes.backtest_history import router as backtest_history_router
 app.include_router(backtest_history_router, prefix="/api/backtest", tags=["Backtest History"])
 
+from app.api.routes.opencode_settings import router as opencode_settings_router
+app.include_router(opencode_settings_router, prefix="/api/opencode-settings", tags=["OpenCode Settings"])
+
+from app.api.routes.opencode_models import router as opencode_models_router
+app.include_router(opencode_models_router, prefix="/api/opencode-models", tags=["OpenCode Models"])
+
+from app.api.routes.opencode_test import router as opencode_test_router
+app.include_router(opencode_test_router, prefix="/api/opencode-test", tags=["OpenCode Test"])
+
+from app.api.routes.opencode_chat import router as opencode_chat_router
+app.include_router(opencode_chat_router, prefix="/api/opencode-chat", tags=["OpenCode Chat"])
+
+from app.api.routes.ai_sessions import router as ai_sessions_router
+app.include_router(ai_sessions_router, prefix="/api/ai-sessions", tags=["AI Sessions"])
+
+from app.api.routes.ai_rules import router as ai_rules_router
+app.include_router(ai_rules_router, prefix="/api/ai-rules", tags=["AI Rules"])
+
 if CORS_ORIGINS:
     from fastapi.middleware.cors import CORSMiddleware
     app.add_middleware(

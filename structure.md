@@ -1,13 +1,11 @@
 ﻿nucestatic-terminal-api/
-├── .dockerignore
-├── .env
-├── .env.example
-├── .gitignore
-├── app/
-│   ├── api/
-│   │   ├── controllers/
+├── app
+│   ├── api
+│   │   ├── controllers
 │   │   │   └── auth.py
-│   │   ├── models/
+│   │   ├── models
+│   │   │   ├── ai_rule.py
+│   │   │   ├── ai_session.py
 │   │   │   ├── alarm.py
 │   │   │   ├── auth.py
 │   │   │   ├── backtest.py
@@ -15,8 +13,11 @@
 │   │   │   ├── bridge.py
 │   │   │   ├── broker.py
 │   │   │   ├── indicator.py
+│   │   │   ├── opencode_settings.py
 │   │   │   └── user.py
-│   │   ├── routes/
+│   │   ├── routes
+│   │   │   ├── ai_rules.py
+│   │   │   ├── ai_sessions.py
 │   │   │   ├── alarms.py
 │   │   │   ├── auth.py
 │   │   │   ├── backtest_candles.py
@@ -31,14 +32,16 @@
 │   │   │   ├── broker_shared.py
 │   │   │   ├── brokers.py
 │   │   │   ├── indicators.py
+│   │   │   ├── opencode_chat.py
+│   │   │   ├── opencode_models.py
+│   │   │   ├── opencode_settings.py
+│   │   │   ├── opencode_test.py
 │   │   │   ├── stats.py
 │   │   │   └── users.py
-│   │   └── utils/
+│   │   └── utils
 │   │       └── security.py
-│   └── databases/
-│       ├── base.py
-│       ├── config.py
-│       ├── migrations/
+│   └── databases
+│       ├── migrations
 │       │   ├── manager.py
 │       │   ├── version_20260910_users.py
 │       │   ├── version_20260911_bookmarks.py
@@ -51,24 +54,36 @@
 │       │   ├── version_20260921_broker_accounts.py
 │       │   ├── version_20260922_broker_orders.py
 │       │   ├── version_20260923_backtest.py
+│       │   ├── version_20260923_opencode_settings.py
 │       │   ├── version_20260924_backtest_trades.py
+│       │   ├── version_20260924_opencode_settings_multi.py
 │       │   ├── version_20260925_backtest_history.py
 │       │   ├── version_20260926_backtest_history_session.py
 │       │   ├── version_20260927_backtest_history_names.py
 │       │   ├── version_20260928_backtest_alarms.py
 │       │   ├── version_20260929_backtest_metrics.py
 │       │   ├── version_20260930_backtest_order_tickets.py
-│       │   └── version_20260931_backtest_provider.py
-│       ├── models/
+│       │   ├── version_20260931_backtest_provider.py
+│       │   ├── version_20260932_ai_sessions.py
+│       │   ├── version_20260933_ai_rules.py
+│       │   ├── version_20260934_ai_sessions_reverted.py
+│       │   └── version_20260935_ai_sessions_usage.py
+│       ├── models
 │       │   ├── alarm.py
 │       │   ├── bookmark.py
 │       │   ├── bridge.py
 │       │   └── user.py
-│       └── seeders/
-│           ├── bridge_seeder.py
-│           └── user_seeder.py
-├── docker-compose.yml
+│       ├── seeders
+│       │   ├── bridge_seeder.py
+│       │   └── user_seeder.py
+│       ├── base.py
+│       └── config.py
+├── .dockerignore
+├── .env
+├── .env.example
+├── .gitignore
 ├── Dockerfile
+├── docker-compose.yml
 ├── main.py
 ├── migrate.py
 ├── readme.md

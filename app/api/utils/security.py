@@ -1,6 +1,7 @@
 import os
 import bcrypt
 import jwt
+from cryptography.fernet import Fernet, InvalidToken
 from datetime import datetime, timedelta
 
 
@@ -10,6 +11,17 @@ def hash_password(password: str) -> str:
 
 def verify_password(password: str, hashed: str) -> bool:
     return bcrypt.checkpw(password.encode(), hashed.encode())
+
+
+def encrypt_api_key(raw: str) -> str:
+    return Fernet(os.getenv("OPENCODE_KEY_SECRET", "").encode()).encrypt(raw.encode()).decode()
+
+
+def decrypt_api_key(token: str) -> str:
+    try:
+        return Fernet(os.getenv("OPENCODE_KEY_SECRET", "").encode()).decrypt(token.encode()).decode()
+    except (InvalidToken, ValueError):
+        return token
 
 
 def create_token(user_id: int) -> str:
