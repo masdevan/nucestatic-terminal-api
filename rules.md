@@ -1,4 +1,5 @@
 - You must understand the project structure first
+- AI responses must be written in Indonesian, but all code produced must be in English
 - Code must be clean and human-readable
 - Variables must have clear names
 - Code must meet QA standards
