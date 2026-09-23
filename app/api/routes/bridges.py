@@ -101,8 +101,6 @@ def update_bridge(bridge_id: int, req: BridgeApiUpdate, authorization: str = Hea
         active = row[3]
         if req.active is not None:
             active = req.active
-            if active:
-                db.execute(text("UPDATE bridge_apis SET active = 0"))
 
         try:
             result = db.execute(
