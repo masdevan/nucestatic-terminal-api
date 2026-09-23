@@ -1,3 +1,4 @@
+from typing import Any
 from pydantic import BaseModel
 
 
@@ -24,3 +25,12 @@ class IndicatorUpdateRequest(BaseModel):
     name: str | None = None
     folders: list[str] | None = None
     files: list[IndicatorFile] | None = None
+
+
+class IndicatorSettingsResponse(BaseModel):
+    indicator_key: str
+    values: dict[str, Any]
+
+
+class IndicatorSettingsRequest(BaseModel):
+    values: dict[str, Any]

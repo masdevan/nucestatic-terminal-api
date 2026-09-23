@@ -31,6 +31,7 @@
 │   │   │   ├── broker_orders.py
 │   │   │   ├── broker_shared.py
 │   │   │   ├── brokers.py
+│   │   │   ├── indicator_settings.py
 │   │   │   ├── indicators.py
 │   │   │   ├── opencode_chat.py
 │   │   │   ├── opencode_models.py
@@ -69,7 +70,8 @@
 │       │   ├── version_20260934_ai_sessions_reverted.py
 │       │   ├── version_20260935_ai_sessions_usage.py
 │       │   ├── version_20260936_bookmarks_bridge.py
-│       │   └── version_20260937_bookmarks_bridge_unique.py
+│       │   ├── version_20260937_bookmarks_bridge_unique.py
+│       │   └── version_20260938_indicator_settings.py
 │       ├── models
 │       │   ├── alarm.py
 │       │   ├── bookmark.py

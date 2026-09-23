@@ -30,6 +30,9 @@ app.include_router(bridges_router, prefix="/api/bridge-apis", tags=["Bridge APIs
 from app.api.routes.indicators import router as indicators_router
 app.include_router(indicators_router, prefix="/api/indicators", tags=["Indicators"])
 
+from app.api.routes.indicator_settings import router as indicator_settings_router
+app.include_router(indicator_settings_router, prefix="/api/indicator-settings", tags=["Indicator Settings"])
+
 from app.api.routes.stats import router as stats_router
 app.include_router(stats_router, prefix="/api/stats", tags=["Stats"])
 
