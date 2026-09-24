@@ -16,12 +16,15 @@ MAX_CONTENT = 200_000
 MAX_TOTAL = 1_000_000
 MAX_FILES = 200
 MAX_FOLDERS = 100
+BUILTIN_NAMES = {"ema", "doubleema", "double ema"}
 
 
 def _validate_name(name: str) -> str:
     value = name.strip()
     if not value or len(value) > 100:
         raise HTTPException(status_code=422, detail="name must be 1-100 characters")
+    if value.lower() in BUILTIN_NAMES:
+        raise HTTPException(status_code=422, detail="name is reserved for a built-in indicator")
     return value
 
 

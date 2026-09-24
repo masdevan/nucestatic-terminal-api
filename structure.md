@@ -71,7 +71,8 @@
 │       │   ├── version_20260935_ai_sessions_usage.py
 │       │   ├── version_20260936_bookmarks_bridge.py
 │       │   ├── version_20260937_bookmarks_bridge_unique.py
-│       │   └── version_20260938_indicator_settings.py
+│       │   ├── version_20260938_indicator_settings.py
+│       │   └── version_20260939_builtin_indicator_names.py
 │       ├── models
 │       │   ├── alarm.py
 │       │   ├── bookmark.py
