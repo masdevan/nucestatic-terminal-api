@@ -1,4 +1,6 @@
 import json
+import queue
+import threading
 import urllib.error
 import urllib.request
 import uuid
@@ -28,9 +30,8 @@ def resolve_root(base_url: str) -> str:
     return root
 
 
-def raise_provider(status: int, body: bytes, reason: str):
-    text = body.decode(errors="ignore")[:500]
-    raise HTTPException(status_code=502, detail=f"Provider {status}: {text or reason}")
+class ProviderFailure(Exception):
+    pass
 
 
 def open_chat(root: str, model: str, messages: list, headers: dict, tools: list | None, tool_choice: Any | None):
@@ -222,6 +223,95 @@ def passthrough(upstream):
         upstream.close()
 
 
+KEEPALIVE_SECONDS = 10
+STREAM_QUEUE_SIZE = 256
+
+
+class StreamFailure:
+    def __init__(self, message: str):
+        self.message = message
+
+
+def open_upstream_generator(root: str, model: str, messages: list, headers: dict, tools: list | None, tool_choice: Any | None):
+    chat_failure = ""
+    try:
+        upstream = open_chat(root, model, messages, headers, tools, tool_choice)
+    except urllib.error.HTTPError as chat_err:
+        if chat_err.code in (401, 402, 403):
+            body = chat_err.read().decode(errors="ignore")[:500]
+            raise ProviderFailure(f"Provider {chat_err.code}: {body or chat_err.reason}")
+        chat_failure = f"chat={chat_err.code}: {chat_err.read().decode(errors='ignore')[:300] or chat_err.reason}"
+    except urllib.error.URLError as chat_url_err:
+        chat_failure = f"chat=unreachable: {chat_url_err.reason}"
+    else:
+        yield from passthrough(upstream)
+        return
+    try:
+        upstream = open_responses(root, model, messages, headers, tools, tool_choice)
+    except urllib.error.HTTPError as resp_err:
+        body = resp_err.read().decode(errors="ignore")[:300]
+        detail = f"Provider responses={resp_err.code}: {body or resp_err.reason}"
+        if chat_failure:
+            detail = f"Provider {chat_failure} / responses={resp_err.code}: {body or resp_err.reason}"
+        raise ProviderFailure(detail)
+    except urllib.error.URLError as url_err:
+        detail = f"Cannot reach provider: {url_err.reason}"
+        if chat_failure:
+            detail = f"Provider {chat_failure} / responses=unreachable: {url_err.reason}"
+        raise ProviderFailure(detail)
+    yield from translate_responses_stream(upstream)
+
+
+def pump_stream(stream, out: queue.Queue, stop: threading.Event) -> None:
+    try:
+        for chunk in stream:
+            while not stop.is_set():
+                try:
+                    out.put(chunk, timeout=0.5)
+                    break
+                except queue.Full:
+                    continue
+            if stop.is_set():
+                break
+    except Exception as error:
+        try:
+            out.put(StreamFailure(str(error) or error.__class__.__name__), timeout=1)
+        except queue.Full:
+            pass
+    finally:
+        try:
+            out.put(None, timeout=1)
+        except queue.Full:
+            pass
+
+
+def stream_with_keepalive(stream):
+    out: queue.Queue = queue.Queue(maxsize=STREAM_QUEUE_SIZE)
+    stop = threading.Event()
+    worker = threading.Thread(target=pump_stream, args=(stream, out, stop), daemon=True)
+    worker.start()
+    try:
+        while True:
+            try:
+                item = out.get(timeout=KEEPALIVE_SECONDS)
+            except queue.Empty:
+                yield b": keepalive\n\n"
+                continue
+            if item is None:
+                break
+            if isinstance(item, StreamFailure):
+                yield emit({"error": item.message})
+                break
+            yield item
+        yield b"data: [DONE]\n\n"
+    finally:
+        stop.set()
+        try:
+            stream.close()
+        except Exception:
+            pass
+
+
 @router.post("")
 def chat(req: ChatRequest, authorization: str = Header(None)):
     db, row = require_user(authorization)
@@ -244,29 +334,13 @@ def chat(req: ChatRequest, authorization: str = Header(None)):
             "x-opencode-session": session_id
         }
         root = resolve_root(setting[2])
-        chat_failure = ""
-        try:
-            upstream = open_chat(root, setting[1], req.messages, headers, req.tools, req.tool_choice)
-            return StreamingResponse(passthrough(upstream), media_type="text/event-stream")
-        except urllib.error.HTTPError as chat_err:
-            if chat_err.code in (401, 402, 403):
-                raise_provider(chat_err.code, chat_err.read(), chat_err.reason)
-            chat_failure = f"chat={chat_err.code}: {chat_err.read().decode(errors='ignore')[:300] or chat_err.reason}"
-        except urllib.error.URLError as chat_url_err:
-            chat_failure = f"chat=unreachable: {chat_url_err.reason}"
-        try:
-            upstream = open_responses(root, setting[1], req.messages, headers, req.tools, req.tool_choice)
-            return StreamingResponse(translate_responses_stream(upstream), media_type="text/event-stream")
-        except urllib.error.HTTPError as resp_err:
-            body = resp_err.read().decode(errors="ignore")[:300]
-            detail = f"Provider responses={resp_err.code}: {body or resp_err.reason}"
-            if chat_failure:
-                detail = f"Provider {chat_failure} / responses={resp_err.code}: {body or resp_err.reason}"
-            raise HTTPException(status_code=502, detail=detail)
-        except urllib.error.URLError as url_err:
-            detail = f"Cannot reach provider: {url_err.reason}"
-            if chat_failure:
-                detail = f"Provider {chat_failure} / responses=unreachable: {url_err.reason}"
-            raise HTTPException(status_code=502, detail=detail)
+        stream = open_upstream_generator(
+            root, setting[1], req.messages, headers, req.tools, req.tool_choice
+        )
+        return StreamingResponse(
+            stream_with_keepalive(stream),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+        )
     finally:
         db.close()
