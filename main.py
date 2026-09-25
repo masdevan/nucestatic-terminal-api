@@ -39,6 +39,9 @@ app.include_router(stats_router, prefix="/api/stats", tags=["Stats"])
 from app.api.routes.alarms import router as alarms_router
 app.include_router(alarms_router, prefix="/api/alarms", tags=["Alarms"])
 
+from app.api.routes.cron_jobs import router as cron_jobs_router
+app.include_router(cron_jobs_router, prefix="/api/cron-jobs", tags=["Cron Jobs"])
+
 from app.api.routes.brokers import router as brokers_router
 app.include_router(brokers_router, prefix="/api/brokers", tags=["Brokers"])
 

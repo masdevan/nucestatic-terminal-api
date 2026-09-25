@@ -1,0 +1,13 @@
+{
+  "name": "nucestatic-terminal-worker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node --experimental-vm-modules index.js"
+  },
+  "dependencies": {
+    "mysql2": "^3.11.0"
+  }
+}

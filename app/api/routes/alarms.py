@@ -1,36 +1,15 @@
-import ipaddress
 import json
 import math
-import socket
-import urllib.parse
 import urllib.request
 from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Query
 from sqlalchemy import text
 from app.api.models.alarm import AlarmCreateRequest, AlarmResponse
 from app.api.controllers.auth import require_user
+from app.api.utils.urls import clean_webhook_url
 
 router = APIRouter()
 
 ENTRY_TYPES = {"buy", "sell"}
-
-
-def _clean_url(raw: str | None) -> str | None:
-    url = (raw or "").strip()
-    if not url:
-        return None
-    if len(url) > 255:
-        raise HTTPException(status_code=422, detail="webhook must be at most 255 characters")
-    parsed = urllib.parse.urlparse(url)
-    if parsed.scheme not in ("http", "https") or not parsed.hostname:
-        raise HTTPException(status_code=422, detail="webhook must be an http(s) URL")
-    try:
-        infos = socket.getaddrinfo(parsed.hostname, parsed.port or 443)
-    except Exception:
-        raise HTTPException(status_code=422, detail="webhook host could not be resolved")
-    for info in infos:
-        if not ipaddress.ip_address(info[4][0]).is_global:
-            raise HTTPException(status_code=422, detail="webhook must target a public address")
-    return url
 
 
 def _price(value: float | None, name: str, required: bool) -> float | None:
@@ -147,7 +126,7 @@ def create_alarm(req: AlarmCreateRequest, background: BackgroundTasks, authoriza
     timeframe = (req.timeframe or "").strip().upper() or None
     if timeframe is not None and len(timeframe) > 10:
         raise HTTPException(status_code=422, detail="timeframe must be at most 10 characters")
-    webhook_url = None if req.backtest else _clean_url(req.webhook)
+    webhook_url = None if req.backtest else clean_webhook_url(req.webhook)
 
     db, row = require_user(authorization)
     try:

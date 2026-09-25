@@ -12,6 +12,7 @@
 │   │   │   ├── bookmark.py
 │   │   │   ├── bridge.py
 │   │   │   ├── broker.py
+│   │   │   ├── cron.py
 │   │   │   ├── indicator.py
 │   │   │   ├── opencode_settings.py
 │   │   │   └── user.py
@@ -31,6 +32,7 @@
 │   │   │   ├── broker_orders.py
 │   │   │   ├── broker_shared.py
 │   │   │   ├── brokers.py
+│   │   │   ├── cron_jobs.py
 │   │   │   ├── indicator_settings.py
 │   │   │   ├── indicators.py
 │   │   │   ├── opencode_chat.py
@@ -40,7 +42,9 @@
 │   │   │   ├── stats.py
 │   │   │   └── users.py
 │   │   └── utils
-│   │       └── security.py
+│   │       ├── security.py
+│   │       ├── urls.py
+│   │       └── values.py
 │   └── databases
 │       ├── migrations
 │       │   ├── manager.py
@@ -72,7 +76,9 @@
 │       │   ├── version_20260936_bookmarks_bridge.py
 │       │   ├── version_20260937_bookmarks_bridge_unique.py
 │       │   ├── version_20260938_indicator_settings.py
-│       │   └── version_20260939_builtin_indicator_names.py
+│       │   ├── version_20260939_builtin_indicator_names.py
+│       │   ├── version_20260940_backtest_session_metrics.py
+│       │   └── version_20260941_cron_jobs.py
 │       ├── models
 │       │   ├── alarm.py
 │       │   ├── bookmark.py
@@ -95,4 +101,11 @@
 ├── requirements.txt
 ├── rules.md
 ├── structure.md
-└── update.sh
+├── update.sh
+└── worker/
+    ├── Dockerfile
+    ├── alarms.js
+    ├── bridge.js
+    ├── index.js
+    ├── indicator.js
+    └── package.json

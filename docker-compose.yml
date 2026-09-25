@@ -45,6 +45,24 @@ services:
     networks:
       - backend
 
+  worker:
+    build: ./worker
+    container_name: nucestatic-terminal-worker
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      MYSQL_HOST: db
+      MYSQL_PORT: "3306"
+      API_BASE_URL: http://app:8311
+    depends_on:
+      db:
+        condition: service_healthy
+      app:
+        condition: service_started
+    networks:
+      - backend
+
 volumes:
   db_data:
 
