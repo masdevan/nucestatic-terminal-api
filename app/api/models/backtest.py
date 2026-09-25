@@ -88,11 +88,13 @@ class BacktestOrderItem(BaseModel):
 class BacktestTradeStateRequest(BaseModel):
     balance: float
     orders: list[BacktestOrderItem] = []
+    metrics: dict | None = None
 
 
 class BacktestTradeStateResponse(BaseModel):
     balance: float
     orders: list[BacktestOrderItem] = []
+    metrics: dict | None = None
 
 
 class BacktestAlarmItem(BaseModel):
