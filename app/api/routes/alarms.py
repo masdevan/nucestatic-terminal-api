@@ -5,6 +5,7 @@ from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Query
 from sqlalchemy import text
 from app.api.models.alarm import AlarmCreateRequest, AlarmResponse
 from app.api.controllers.auth import require_user
+from app.api.utils.dry_run import is_dry_run
 from app.api.utils.urls import clean_webhook_url
 
 router = APIRouter()
@@ -179,7 +180,7 @@ def create_alarm(req: AlarmCreateRequest, background: BackgroundTasks, authoriza
             {"alarm_id": alarm_id}
         ).fetchone()
         alarm = _row_to_response(result)
-        if webhook_url:
+        if webhook_url and not is_dry_run():
             background.add_task(_deliver_webhook, webhook_url, _webhook_payload(alarm))
         return alarm
     finally:

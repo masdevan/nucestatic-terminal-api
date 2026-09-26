@@ -1,8 +1,9 @@
 import os
 import uvicorn
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from sqlalchemy import text
+from app.api.utils.dry_run import DRY_RUN
 
 load_dotenv()
 
@@ -14,6 +15,13 @@ app = FastAPI(
     description="API for Nucestatic Terminal",
     version="1.0.0"
 )
+
+
+@app.middleware("http")
+async def apply_dry_run(request: Request, call_next):
+    DRY_RUN.set(request.headers.get("x-dry-run") == "1")
+    return await call_next(request)
+
 
 from app.api.routes.auth import router as auth_router
 app.include_router(auth_router, prefix="/api/auth", tags=["Auth"])
@@ -97,9 +105,9 @@ async def health_check():
     db = SessionLocal()
     try:
         db.execute(text("SELECT 1"))
-        return {"status": "healthy", "database": "connected"}
+        return {"status": "healthy", "database": "connected", "dry_run": True}
     except Exception:
-        return {"status": "unhealthy", "database": "disconnected"}
+        return {"status": "unhealthy", "database": "disconnected", "dry_run": True}
     finally:
         db.close()
 

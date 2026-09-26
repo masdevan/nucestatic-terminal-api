@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from sqlalchemy import text
 from typing import Any
 from app.api.controllers.auth import require_user
+from app.api.utils.dry_run import is_dry_run
 from app.api.utils.security import decrypt_api_key
 
 router = APIRouter()
@@ -324,6 +325,12 @@ def chat(req: ChatRequest, authorization: str = Header(None)):
         ).fetchone()
         if not setting:
             raise HTTPException(status_code=404, detail="No active API key")
+        if is_dry_run():
+            return StreamingResponse(
+                iter([emit({"choices": [{"index": 0, "delta": {"content": "dry run"}}]}), b"data: [DONE]\n\n"]),
+                media_type="text/event-stream",
+                headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+            )
         session_id = req.session_id.strip() if req.session_id else ""
         if not session_id:
             session_id = uuid.uuid4().hex

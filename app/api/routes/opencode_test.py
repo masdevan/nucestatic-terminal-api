@@ -6,6 +6,7 @@ from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import text
 from app.api.controllers.auth import require_user
+from app.api.utils.dry_run import is_dry_run
 from app.api.utils.security import decrypt_api_key
 
 router = APIRouter()
@@ -40,6 +41,8 @@ def test_connection(req: TestRequest, authorization: str = Header(None)):
             raise HTTPException(status_code=422, detail="Model required")
         if not (base_url.startswith("http://") or base_url.startswith("https://")):
             raise HTTPException(status_code=422, detail="Base URL must start with http:// or https://")
+        if is_dry_run():
+            return {"status": "dry_run"}
         root = base_url
         for suffix in ("/v1/chat/completions", "/v1/responses", "/chat/completions", "/responses", "/v1"):
             if root.endswith(suffix):
