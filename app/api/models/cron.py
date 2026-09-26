@@ -20,6 +20,16 @@ class CronJobResponse(BaseModel):
     created_at: datetime | None = None
 
 
+class CronRunResponse(BaseModel):
+    id: int
+    status: str
+    candle_time: str | None = None
+    alarms: int = 0
+    duration_ms: int = 0
+    error: str | None = None
+    ran_at: datetime | None = None
+
+
 class CronJobCreateRequest(BaseModel):
     indicator_id: int
     bridge_id: int

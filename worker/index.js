@@ -93,9 +93,30 @@ async function recordAlert(id, candleTime) {
   )
 }
 
+const KEEP_RUNS = 100
+
+async function recordRun(job, result, durationMs, error = null) {
+  await pool.query(
+    `INSERT INTO cron_job_runs (job_id, user_id, status, candle_time, alarms, duration_ms, error)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [job.id, job.user_id, result.status, result.candleTime, result.alarms, durationMs, error]
+  )
+  await pool.query(
+    `DELETE FROM cron_job_runs
+      WHERE job_id = ? AND id NOT IN (
+        SELECT id FROM (
+          SELECT id FROM cron_job_runs WHERE job_id = ? ORDER BY id DESC LIMIT ${KEEP_RUNS}
+        ) AS keep
+      )`,
+    [job.id, job.id]
+  )
+}
+
 async function runJob(row, candles, bridgeModes) {
   const latest = candles[candles.length - 1].time
-  if (row.last_candle_time && latest <= row.last_candle_time) return
+  if (row.last_candle_time && latest <= row.last_candle_time) {
+    return { status: 'skip', candleTime: latest, alarms: 0 }
+  }
   const files = await indicatorFiles(row.indicator_id)
   const settings = await indicatorValues(row.user_id, row.indicator_id)
   const values = { ...settings, ...jobValues(row) }
@@ -103,10 +124,11 @@ async function runJob(row, candles, bridgeModes) {
   const normalized = normalizeAlarms(alarms, row.symbol)
   if (normalized.length === 0) {
     await setError(row.id, null)
-    return
+    return { status: 'ok', candleTime: latest, alarms: 0 }
   }
   const sent = await sendAlarms(row, normalized)
   if (sent > 0) await recordAlert(row.id, latest)
+  return { status: 'ok', candleTime: latest, alarms: sent }
 }
 
 async function runCycle() {
@@ -116,6 +138,7 @@ async function runCycle() {
   const bridgeModes = await activeBridgeModes()
   const candleCache = new Map()
   for (const job of jobs) {
+    const startedAt = Date.now()
     try {
       const key = `${job.bridge_url}|${job.symbol}|${job.timeframe}`
       let candles = candleCache.get(key)
@@ -124,10 +147,17 @@ async function runCycle() {
         candleCache.set(key, candles)
       }
       if (candles.length === 0) throw new Error('No candles returned by bridge')
-      await runJob(job, candles, bridgeModes)
+      const result = await runJob(job, candles, bridgeModes)
+      await recordRun(job, result, Date.now() - startedAt).catch(() => undefined)
     } catch (err) {
       console.error(`[cron] job ${job.id} failed: ${err.message}`)
       await setError(job.id, errorText(err)).catch(() => undefined)
+      await recordRun(
+        job,
+        { status: 'error', candleTime: null, alarms: 0 },
+        Date.now() - startedAt,
+        errorText(err)
+      ).catch(() => undefined)
     }
   }
 }

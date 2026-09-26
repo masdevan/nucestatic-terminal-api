@@ -1,7 +1,7 @@
 import json
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Header, HTTPException, Query
 from sqlalchemy import text
-from app.api.models.cron import CronJobCreateRequest, CronJobResponse, CronJobUpdateRequest
+from app.api.models.cron import CronJobCreateRequest, CronJobResponse, CronRunResponse, CronJobUpdateRequest
 from app.api.controllers.auth import require_user
 from app.api.utils.urls import clean_webhook_url
 from app.api.utils.values import validate_input_values
@@ -109,6 +109,42 @@ def _timeframe(raw: str) -> str:
 def _values_json(raw: dict | None) -> str | None:
     values = validate_input_values(raw) if raw is not None else None
     return json.dumps(values) if values else None
+
+
+def _run_to_response(row) -> CronRunResponse:
+    return CronRunResponse(
+        id=row[0],
+        status=row[1],
+        candle_time=row[2],
+        alarms=int(row[3]),
+        duration_ms=int(row[4]),
+        error=row[5],
+        ran_at=row[6]
+    )
+
+
+@router.get("/{job_id}/runs", response_model=list[CronRunResponse])
+def list_job_runs(
+    job_id: int,
+    limit: int = Query(50, ge=1, le=200),
+    authorization: str = Header(None)
+):
+    db, user = require_user(authorization)
+    try:
+        _fetch(db, user[0], job_id)
+        rows = db.execute(
+            text("""
+                SELECT id, status, candle_time, alarms, duration_ms, error, ran_at
+                FROM cron_job_runs
+                WHERE job_id = :job_id
+                ORDER BY id DESC
+                LIMIT :limit
+            """),
+            {"job_id": job_id, "limit": limit}
+        ).fetchall()
+        return [_run_to_response(row) for row in rows]
+    finally:
+        db.close()
 
 
 @router.get("", response_model=list[CronJobResponse])
