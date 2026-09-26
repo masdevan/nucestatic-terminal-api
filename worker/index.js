@@ -18,11 +18,12 @@ const pool = mysql.createPool({
 
 async function dueJobs() {
   const [rows] = await pool.query(`
-    SELECT cj.id, cj.user_id, cj.indicator_id, cj.symbol, cj.timeframe,
+    SELECT cj.id, cj.user_id, cj.indicator_id, i.name AS indicator_name, cj.symbol, cj.timeframe,
            cj.webhook_url, cj.params_json, cj.last_candle_time,
            b.url AS bridge_url
       FROM cron_jobs cj
       JOIN bridge_apis b ON b.id = cj.bridge_id
+      JOIN indicators i ON i.id = cj.indicator_id
      WHERE cj.enabled = 1 AND b.active = 1 AND b.mode = 'dynamic'
        AND (cj.last_run_at IS NULL OR TIMESTAMPDIFF(SECOND, cj.last_run_at, NOW()) >= cj.interval_seconds)
      ORDER BY cj.id

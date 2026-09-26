@@ -10,6 +10,16 @@ from app.api.utils.urls import clean_webhook_url
 router = APIRouter()
 
 ENTRY_TYPES = {"buy", "sell"}
+ALARM_SOURCES = {"chart", "cron"}
+
+
+def _source(raw: str | None) -> str | None:
+    if raw is None or raw == "":
+        return None
+    value = raw.strip().lower()
+    if value not in ALARM_SOURCES:
+        raise HTTPException(status_code=422, detail="source must be chart or cron")
+    return value
 
 
 def _price(value: float | None, name: str, required: bool) -> float | None:
@@ -35,7 +45,9 @@ def _row_to_response(r) -> AlarmResponse:
         is_read=bool(r[8]),
         created_at=r[9],
         webhook_url=r[10],
-        backtest=bool(r[11])
+        backtest=bool(r[11]),
+        source=r[12],
+        indicator_name=r[13]
     )
 
 
@@ -75,21 +87,28 @@ def _webhook_payload(alarm: AlarmResponse) -> dict:
 def list_alarms(
     limit: int = Query(25, ge=1, le=1000),
     page: int = Query(1, ge=1),
+    source: str | None = Query(None),
     authorization: str = Header(None)
 ):
+    source_filter = _source(source)
     db, row = require_user(authorization)
     try:
+        where = "user_id = :user_id"
+        params = {"user_id": row[0]}
+        if source_filter is not None:
+            where += " AND source = :source"
+            params["source"] = source_filter
         total = db.execute(
-            text("SELECT COUNT(*) FROM alarms WHERE user_id = :user_id"),
-            {"user_id": row[0]}
+            text(f"SELECT COUNT(*) FROM alarms WHERE {where}"),
+            params
         ).scalar()
         unread = db.execute(
-            text("SELECT COUNT(*) FROM alarms WHERE user_id = :user_id AND is_read = 0"),
-            {"user_id": row[0]}
+            text(f"SELECT COUNT(*) FROM alarms WHERE {where} AND is_read = 0"),
+            params
         ).scalar()
         rows = db.execute(
-            text("SELECT id, symbol, description, entry_type, entry_price, tp_price, sl_price, timeframe, is_read, created_at, webhook_url, backtest FROM alarms WHERE user_id = :user_id ORDER BY is_read ASC, id DESC LIMIT :limit OFFSET :offset"),
-            {"user_id": row[0], "limit": limit, "offset": (page - 1) * limit}
+            text(f"SELECT id, symbol, description, entry_type, entry_price, tp_price, sl_price, timeframe, is_read, created_at, webhook_url, backtest, source, indicator_name FROM alarms WHERE {where} ORDER BY is_read ASC, id DESC LIMIT :limit OFFSET :offset"),
+            {**params, "limit": limit, "offset": (page - 1) * limit}
         ).fetchall()
         total_pages = (total + limit - 1) // limit if total > 0 else 1
         return {
@@ -120,6 +139,9 @@ def create_alarm(req: AlarmCreateRequest, background: BackgroundTasks, authoriza
     description = (req.description or "").strip() or None
     if description is not None and len(description) > 500:
         raise HTTPException(status_code=422, detail="description must be at most 500 characters")
+    indicator_name = (req.indicator_name or "").strip() or None
+    if indicator_name is not None and len(indicator_name) > 100:
+        raise HTTPException(status_code=422, detail="indicator_name must be at most 100 characters")
     entry_price = _price(req.entry_price, "entry_price", True)
     tp_price = _price(req.tp_price, "tp_price", False)
     sl_price = _price(req.sl_price, "sl_price", False)
@@ -132,8 +154,8 @@ def create_alarm(req: AlarmCreateRequest, background: BackgroundTasks, authoriza
     try:
         inserted = db.execute(
             text("""
-                INSERT INTO alarms (user_id, symbol, description, entry_type, entry_price, tp_price, sl_price, timeframe, webhook_url, backtest)
-                VALUES (:user_id, :symbol, :description, :entry_type, :entry_price, :tp_price, :sl_price, :timeframe, :webhook_url, :backtest)
+                INSERT INTO alarms (user_id, symbol, description, entry_type, entry_price, tp_price, sl_price, timeframe, webhook_url, backtest, source, indicator_name)
+                VALUES (:user_id, :symbol, :description, :entry_type, :entry_price, :tp_price, :sl_price, :timeframe, :webhook_url, :backtest, :source, :indicator_name)
             """),
             {
                 "user_id": row[0],
@@ -145,13 +167,15 @@ def create_alarm(req: AlarmCreateRequest, background: BackgroundTasks, authoriza
                 "sl_price": sl_price,
                 "timeframe": timeframe,
                 "webhook_url": webhook_url,
-                "backtest": 1 if req.backtest else 0
+                "backtest": 1 if req.backtest else 0,
+                "source": req.source,
+                "indicator_name": indicator_name
             }
         )
         alarm_id = inserted.lastrowid
         db.commit()
         result = db.execute(
-            text("SELECT id, symbol, description, entry_type, entry_price, tp_price, sl_price, timeframe, is_read, created_at, webhook_url, backtest FROM alarms WHERE id = :alarm_id"),
+            text("SELECT id, symbol, description, entry_type, entry_price, tp_price, sl_price, timeframe, is_read, created_at, webhook_url, backtest, source, indicator_name FROM alarms WHERE id = :alarm_id"),
             {"alarm_id": alarm_id}
         ).fetchone()
         alarm = _row_to_response(result)
@@ -163,15 +187,18 @@ def create_alarm(req: AlarmCreateRequest, background: BackgroundTasks, authoriza
 
 
 @router.patch("/read-all")
-def read_all_alarms(authorization: str = Header(None)):
+def read_all_alarms(source: str | None = Query(None), authorization: str = Header(None)):
+    source_filter = _source(source)
     db, row = require_user(authorization)
     try:
-        db.execute(
-            text("UPDATE alarms SET is_read = 1 WHERE user_id = :user_id AND is_read = 0"),
-            {"user_id": row[0]}
-        )
+        where = "user_id = :user_id AND is_read = 0"
+        params = {"user_id": row[0]}
+        if source_filter is not None:
+            where += " AND source = :source"
+            params["source"] = source_filter
+        db.execute(text(f"UPDATE alarms SET is_read = 1 WHERE {where}"), params)
         db.commit()
-        return {"detail": "All alarms marked as read"}
+        return {"detail": "Alarms marked as read"}
     finally:
         db.close()
 
@@ -193,13 +220,16 @@ def read_alarm(alarm_id: int, authorization: str = Header(None)):
 
 
 @router.delete("")
-def delete_all_alarms(authorization: str = Header(None)):
+def delete_all_alarms(source: str | None = Query(None), authorization: str = Header(None)):
+    source_filter = _source(source)
     db, row = require_user(authorization)
     try:
-        result = db.execute(
-            text("DELETE FROM alarms WHERE user_id = :user_id"),
-            {"user_id": row[0]}
-        )
+        where = "user_id = :user_id"
+        params = {"user_id": row[0]}
+        if source_filter is not None:
+            where += " AND source = :source"
+            params["source"] = source_filter
+        result = db.execute(text(f"DELETE FROM alarms WHERE {where}"), params)
         db.commit()
         return {"detail": f"{result.rowcount} alarm(s) deleted"}
     finally:

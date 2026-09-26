@@ -57,7 +57,9 @@ export async function sendAlarms(job, alarms) {
       sl_price: alarm.sl_price,
       timeframe: alarm.timeframe || job.timeframe,
       webhook: job.webhook_url || alarm.webhook,
-      backtest: false
+      backtest: false,
+      source: 'cron',
+      indicator_name: job.indicator_name
     }
     try {
       const res = await fetch(`${API_BASE_URL}/api/alarms`, {

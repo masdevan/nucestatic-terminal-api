@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 from pydantic import BaseModel
 
 
@@ -15,6 +16,8 @@ class AlarmResponse(BaseModel):
     created_at: datetime | None = None
     webhook_url: str | None = None
     backtest: bool = False
+    source: str = "chart"
+    indicator_name: str | None = None
 
 
 class AlarmCreateRequest(BaseModel):
@@ -27,3 +30,5 @@ class AlarmCreateRequest(BaseModel):
     timeframe: str | None = None
     webhook: str | None = None
     backtest: bool = False
+    source: Literal["chart", "cron"] = "chart"
+    indicator_name: str | None = None
