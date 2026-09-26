@@ -35,6 +35,15 @@ async function markRun(ids) {
   await pool.query('UPDATE cron_jobs SET last_run_at = NOW() WHERE id IN (?)', [ids])
 }
 
+async function activeBridgeModes() {
+  const [rows] = await pool.query('SELECT url, mode FROM bridge_apis WHERE active = 1')
+  const modes = new Map()
+  for (const row of rows) {
+    modes.set(String(row.url).trim().replace(/\/+$/, ''), row.mode)
+  }
+  return modes
+}
+
 async function indicatorFiles(indicatorId) {
   const [rows] = await pool.query(
     'SELECT path, content FROM indicator_files WHERE indicator_id = ? ORDER BY path',
@@ -83,13 +92,13 @@ async function recordAlert(id, candleTime) {
   )
 }
 
-async function runJob(row, candles) {
+async function runJob(row, candles, bridgeModes) {
   const latest = candles[candles.length - 1].time
   if (row.last_candle_time && latest <= row.last_candle_time) return
   const files = await indicatorFiles(row.indicator_id)
   const settings = await indicatorValues(row.user_id, row.indicator_id)
   const values = { ...settings, ...jobValues(row) }
-  const { alarms } = await runIndicator(files, candles, values)
+  const { alarms } = await runIndicator(files, candles, values, row.bridge_url, bridgeModes)
   const normalized = normalizeAlarms(alarms, row.symbol)
   if (normalized.length === 0) {
     await setError(row.id, null)
@@ -103,6 +112,7 @@ async function runCycle() {
   const jobs = await dueJobs()
   if (jobs.length === 0) return
   await markRun(jobs.map((job) => job.id))
+  const bridgeModes = await activeBridgeModes()
   const candleCache = new Map()
   for (const job of jobs) {
     try {
@@ -113,7 +123,7 @@ async function runCycle() {
         candleCache.set(key, candles)
       }
       if (candles.length === 0) throw new Error('No candles returned by bridge')
-      await runJob(job, candles)
+      await runJob(job, candles, bridgeModes)
     } catch (err) {
       console.error(`[cron] job ${job.id} failed: ${err.message}`)
       await setError(job.id, errorText(err)).catch(() => undefined)
