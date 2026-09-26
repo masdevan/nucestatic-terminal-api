@@ -61,8 +61,8 @@ def _deliver_webhook(url: str, payload: dict):
         )
         with urllib.request.urlopen(req, timeout=5):
             pass
-    except Exception:
-        pass
+    except Exception as err:
+        print(f"[webhook] delivery failed: {err}", flush=True)
 
 
 def _webhook_payload(alarm: AlarmResponse) -> dict:
@@ -79,7 +79,7 @@ def _webhook_payload(alarm: AlarmResponse) -> dict:
     return {
         "event": "nucestatic.alarm.created",
         "content": content,
-        "alarm": alarm.model_dump()
+        "alarm": alarm.model_dump(mode="json")
     }
 
 
