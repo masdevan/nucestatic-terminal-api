@@ -1,87 +1,20 @@
-import json
-import math
-import urllib.request
 from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Query
 from sqlalchemy import text
 from app.api.models.alarm import AlarmCreateRequest, AlarmResponse
 from app.api.controllers.auth import require_user
+from app.api.routes.alarm_shared import (
+    ALARM_COLUMNS,
+    ENTRY_TYPES,
+    deliver_webhook,
+    price,
+    row_to_response,
+    source_filter,
+    webhook_payload
+)
 from app.api.utils.dry_run import is_dry_run
 from app.api.utils.urls import clean_webhook_url
 
 router = APIRouter()
-
-ENTRY_TYPES = {"buy", "sell"}
-ALARM_SOURCES = {"chart", "cron"}
-
-
-def _source(raw: str | None) -> str | None:
-    if raw is None or raw == "":
-        return None
-    value = raw.strip().lower()
-    if value not in ALARM_SOURCES:
-        raise HTTPException(status_code=422, detail="source must be chart or cron")
-    return value
-
-
-def _price(value: float | None, name: str, required: bool) -> float | None:
-    if value is None:
-        if required:
-            raise HTTPException(status_code=422, detail=f"{name} is required")
-        return None
-    if not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0:
-        raise HTTPException(status_code=422, detail=f"{name} must be a number greater than 0")
-    return float(value)
-
-
-def _row_to_response(r) -> AlarmResponse:
-    return AlarmResponse(
-        id=r[0],
-        symbol=r[1],
-        description=r[2],
-        entry_type=r[3],
-        entry_price=float(r[4]),
-        tp_price=float(r[5]) if r[5] is not None else None,
-        sl_price=float(r[6]) if r[6] is not None else None,
-        timeframe=r[7],
-        is_read=bool(r[8]),
-        created_at=r[9],
-        webhook_url=r[10],
-        backtest=bool(r[11]),
-        source=r[12],
-        indicator_name=r[13]
-    )
-
-
-def _deliver_webhook(url: str, payload: dict):
-    try:
-        req = urllib.request.Request(
-            url,
-            data=json.dumps(payload).encode(),
-            headers={"Content-Type": "application/json", "User-Agent": "Mozilla/5.0 nucestatic-terminal"},
-            method="POST"
-        )
-        with urllib.request.urlopen(req, timeout=5):
-            pass
-    except Exception as err:
-        print(f"[webhook] delivery failed: {err}", flush=True)
-
-
-def _webhook_payload(alarm: AlarmResponse) -> dict:
-    content = f"🔔 {alarm.entry_type.upper()} {alarm.symbol} @ {alarm.entry_price}"
-    extras = []
-    if alarm.tp_price is not None:
-        extras.append(f"TP {alarm.tp_price}")
-    if alarm.sl_price is not None:
-        extras.append(f"SL {alarm.sl_price}")
-    if extras:
-        content += f" ({', '.join(extras)})"
-    if alarm.description:
-        content += f" — {alarm.description}"
-    return {
-        "event": "nucestatic.alarm.created",
-        "content": content,
-        "alarm": alarm.model_dump(mode="json")
-    }
 
 
 @router.get("")
@@ -91,14 +24,14 @@ def list_alarms(
     source: str | None = Query(None),
     authorization: str = Header(None)
 ):
-    source_filter = _source(source)
+    source_value = source_filter(source)
     db, row = require_user(authorization)
     try:
         where = "user_id = :user_id"
         params = {"user_id": row[0]}
-        if source_filter is not None:
+        if source_value is not None:
             where += " AND source = :source"
-            params["source"] = source_filter
+            params["source"] = source_value
         total = db.execute(
             text(f"SELECT COUNT(*) FROM alarms WHERE {where}"),
             params
@@ -108,12 +41,12 @@ def list_alarms(
             params
         ).scalar()
         rows = db.execute(
-            text(f"SELECT id, symbol, description, entry_type, entry_price, tp_price, sl_price, timeframe, is_read, created_at, webhook_url, backtest, source, indicator_name FROM alarms WHERE {where} ORDER BY is_read ASC, id DESC LIMIT :limit OFFSET :offset"),
+            text(f"SELECT {ALARM_COLUMNS} FROM alarms WHERE {where} ORDER BY is_read ASC, id DESC LIMIT :limit OFFSET :offset"),
             {**params, "limit": limit, "offset": (page - 1) * limit}
         ).fetchall()
         total_pages = (total + limit - 1) // limit if total > 0 else 1
         return {
-            "alarms": [_row_to_response(r).model_dump() for r in rows],
+            "alarms": [row_to_response(r).model_dump() for r in rows],
             "total": total,
             "unread": unread,
             "pagination": {
@@ -143,9 +76,9 @@ def create_alarm(req: AlarmCreateRequest, background: BackgroundTasks, authoriza
     indicator_name = (req.indicator_name or "").strip() or None
     if indicator_name is not None and len(indicator_name) > 100:
         raise HTTPException(status_code=422, detail="indicator_name must be at most 100 characters")
-    entry_price = _price(req.entry_price, "entry_price", True)
-    tp_price = _price(req.tp_price, "tp_price", False)
-    sl_price = _price(req.sl_price, "sl_price", False)
+    entry_price = price(req.entry_price, "entry_price", True)
+    tp_price = price(req.tp_price, "tp_price", False)
+    sl_price = price(req.sl_price, "sl_price", False)
     timeframe = (req.timeframe or "").strip().upper() or None
     if timeframe is not None and len(timeframe) > 10:
         raise HTTPException(status_code=422, detail="timeframe must be at most 10 characters")
@@ -176,12 +109,12 @@ def create_alarm(req: AlarmCreateRequest, background: BackgroundTasks, authoriza
         alarm_id = inserted.lastrowid
         db.commit()
         result = db.execute(
-            text("SELECT id, symbol, description, entry_type, entry_price, tp_price, sl_price, timeframe, is_read, created_at, webhook_url, backtest, source, indicator_name FROM alarms WHERE id = :alarm_id"),
+            text(f"SELECT {ALARM_COLUMNS} FROM alarms WHERE id = :alarm_id"),
             {"alarm_id": alarm_id}
         ).fetchone()
-        alarm = _row_to_response(result)
+        alarm = row_to_response(result)
         if webhook_url and not is_dry_run():
-            background.add_task(_deliver_webhook, webhook_url, _webhook_payload(alarm))
+            background.add_task(deliver_webhook, webhook_url, webhook_payload(alarm))
         return alarm
     finally:
         db.close()
@@ -189,14 +122,14 @@ def create_alarm(req: AlarmCreateRequest, background: BackgroundTasks, authoriza
 
 @router.patch("/read-all")
 def read_all_alarms(source: str | None = Query(None), authorization: str = Header(None)):
-    source_filter = _source(source)
+    source_value = source_filter(source)
     db, row = require_user(authorization)
     try:
         where = "user_id = :user_id AND is_read = 0"
         params = {"user_id": row[0]}
-        if source_filter is not None:
+        if source_value is not None:
             where += " AND source = :source"
-            params["source"] = source_filter
+            params["source"] = source_value
         db.execute(text(f"UPDATE alarms SET is_read = 1 WHERE {where}"), params)
         db.commit()
         return {"detail": "Alarms marked as read"}
@@ -222,14 +155,14 @@ def read_alarm(alarm_id: int, authorization: str = Header(None)):
 
 @router.delete("")
 def delete_all_alarms(source: str | None = Query(None), authorization: str = Header(None)):
-    source_filter = _source(source)
+    source_value = source_filter(source)
     db, row = require_user(authorization)
     try:
         where = "user_id = :user_id"
         params = {"user_id": row[0]}
-        if source_filter is not None:
+        if source_value is not None:
             where += " AND source = :source"
-            params["source"] = source_filter
+            params["source"] = source_value
         result = db.execute(text(f"DELETE FROM alarms WHERE {where}"), params)
         db.commit()
         return {"detail": f"{result.rowcount} alarm(s) deleted"}
