@@ -13,12 +13,23 @@ class IndicatorResponse(BaseModel):
     folders: list[str]
     files: list[IndicatorFile]
     updated_at: str
+    builtin: str | None = None
 
 
 class IndicatorCreateRequest(BaseModel):
     name: str
     folders: list[str] = []
     files: list[IndicatorFile]
+
+
+class IndicatorBuiltinItem(BaseModel):
+    key: str
+    name: str
+    files: list[IndicatorFile]
+
+
+class IndicatorBuiltinSyncRequest(BaseModel):
+    builtins: list[IndicatorBuiltinItem]
 
 
 class IndicatorUpdateRequest(BaseModel):

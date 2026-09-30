@@ -1,4 +1,5 @@
 import json
+import re
 from fastapi import HTTPException
 from sqlalchemy import text
 from app.api.models.indicator import IndicatorFile, IndicatorResponse
@@ -7,7 +8,8 @@ MAX_CONTENT = 200_000
 MAX_TOTAL = 1_000_000
 MAX_FILES = 200
 MAX_FOLDERS = 100
-BUILTIN_NAMES = {"ema", "doubleema", "double ema"}
+BUILTIN_NAMES = {"doubleema", "double ema", "hkaconcept", "hka concept"}
+BUILTIN_KEY_PATTERN = re.compile(r"^[A-Za-z0-9_.:-]{1,100}$")
 
 
 def validate_name(name: str) -> str:
@@ -16,6 +18,13 @@ def validate_name(name: str) -> str:
         raise HTTPException(status_code=422, detail="name must be 1-100 characters")
     if value.lower() in BUILTIN_NAMES:
         raise HTTPException(status_code=422, detail="name is reserved for a built-in indicator")
+    return value
+
+
+def validate_builtin_key(key: str) -> str:
+    value = (key or "").strip()
+    if not BUILTIN_KEY_PATTERN.match(value):
+        raise HTTPException(status_code=422, detail="invalid builtin key")
     return value
 
 
@@ -62,13 +71,14 @@ def validate_files(files: list[IndicatorFile]) -> list[IndicatorFile]:
     return out
 
 
-def row_to_response(row, folders, files) -> IndicatorResponse:
+def row_to_response(row, folders, files, builtin=None) -> IndicatorResponse:
     return IndicatorResponse(
         id=row[0],
         name=row[1],
         folders=folders,
         files=files,
-        updated_at=str(row[2])
+        updated_at=str(row[2]),
+        builtin=builtin
     )
 
 
@@ -78,6 +88,25 @@ def files_for(db, indicator_id: int) -> list[IndicatorFile]:
         {"indicator_id": indicator_id}
     ).fetchall()
     return [IndicatorFile(path=r[0], content=r[1]) for r in rows]
+
+
+def files_by_indicator(db, rows) -> dict:
+    if not rows:
+        return {}
+    params = {f"id{i}": r[0] for i, r in enumerate(rows)}
+    placeholders = ", ".join(f":id{i}" for i in range(len(rows)))
+    file_rows = db.execute(
+        text(f"""
+            SELECT indicator_id, path, content FROM indicator_files
+            WHERE indicator_id IN ({placeholders})
+            ORDER BY indicator_id, path
+        """),
+        params
+    ).fetchall()
+    out: dict = {}
+    for file_row in file_rows:
+        out.setdefault(file_row[0], []).append(IndicatorFile(path=file_row[1], content=file_row[2]))
+    return out
 
 
 def folders_of(raw: str) -> list[str]:
