@@ -41,6 +41,9 @@ app.include_router(indicators_router, prefix="/api/indicators", tags=["Indicator
 from app.api.routes.indicator_settings import router as indicator_settings_router
 app.include_router(indicator_settings_router, prefix="/api/indicator-settings", tags=["Indicator Settings"])
 
+from app.api.routes.indicator_versions import router as indicator_versions_router
+app.include_router(indicator_versions_router, prefix="/api/indicator-versions", tags=["Indicator Versions"])
+
 from app.api.routes.stats import router as stats_router
 app.include_router(stats_router, prefix="/api/stats", tags=["Stats"])
 

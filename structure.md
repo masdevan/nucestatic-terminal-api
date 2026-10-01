@@ -14,6 +14,7 @@
 │   │   │   ├── broker.py
 │   │   │   ├── cron.py
 │   │   │   ├── indicator.py
+│   │   │   ├── indicator_version.py
 │   │   │   ├── opencode_settings.py
 │   │   │   └── user.py
 │   │   ├── routes
@@ -37,6 +38,7 @@
 │   │   │   ├── cron_shared.py
 │   │   │   ├── indicator_settings.py
 │   │   │   ├── indicator_shared.py
+│   │   │   ├── indicator_versions.py
 │   │   │   ├── indicators.py
 │   │   │   ├── opencode_chat.py
 │   │   │   ├── opencode_models.py
@@ -88,7 +90,9 @@
 │       │   ├── version_20260942_alarm_source.py
 │       │   ├── version_20260943_alarm_indicator_name.py
 │       │   ├── version_20260944_cron_job_runs.py
-│       │   └── version_20260945_indicators_builtin.py
+│       │   ├── version_20260945_indicators_builtin.py
+│       │   ├── version_20260946_indicator_versions.py
+│       │   └── version_20260947_indicator_versions_session.py
 │       ├── models
 │       │   ├── alarm.py
 │       │   ├── bookmark.py
