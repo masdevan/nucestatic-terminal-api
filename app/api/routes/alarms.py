@@ -22,6 +22,7 @@ def list_alarms(
     limit: int = Query(25, ge=1, le=1000),
     page: int = Query(1, ge=1),
     source: str | None = Query(None),
+    backtest: bool | None = Query(None),
     authorization: str = Header(None)
 ):
     source_value = source_filter(source)
@@ -32,6 +33,9 @@ def list_alarms(
         if source_value is not None:
             where += " AND source = :source"
             params["source"] = source_value
+        if backtest is not None:
+            where += " AND backtest = :backtest"
+            params["backtest"] = 1 if backtest else 0
         total = db.execute(
             text(f"SELECT COUNT(*) FROM alarms WHERE {where}"),
             params
@@ -121,7 +125,11 @@ def create_alarm(req: AlarmCreateRequest, background: BackgroundTasks, authoriza
 
 
 @router.patch("/read-all")
-def read_all_alarms(source: str | None = Query(None), authorization: str = Header(None)):
+def read_all_alarms(
+    source: str | None = Query(None),
+    backtest: bool | None = Query(None),
+    authorization: str = Header(None)
+):
     source_value = source_filter(source)
     db, row = require_user(authorization)
     try:
@@ -130,6 +138,9 @@ def read_all_alarms(source: str | None = Query(None), authorization: str = Heade
         if source_value is not None:
             where += " AND source = :source"
             params["source"] = source_value
+        if backtest is not None:
+            where += " AND backtest = :backtest"
+            params["backtest"] = 1 if backtest else 0
         db.execute(text(f"UPDATE alarms SET is_read = 1 WHERE {where}"), params)
         db.commit()
         return {"detail": "Alarms marked as read"}
@@ -154,7 +165,11 @@ def read_alarm(alarm_id: int, authorization: str = Header(None)):
 
 
 @router.delete("")
-def delete_all_alarms(source: str | None = Query(None), authorization: str = Header(None)):
+def delete_all_alarms(
+    source: str | None = Query(None),
+    backtest: bool | None = Query(None),
+    authorization: str = Header(None)
+):
     source_value = source_filter(source)
     db, row = require_user(authorization)
     try:
@@ -163,6 +178,9 @@ def delete_all_alarms(source: str | None = Query(None), authorization: str = Hea
         if source_value is not None:
             where += " AND source = :source"
             params["source"] = source_value
+        if backtest is not None:
+            where += " AND backtest = :backtest"
+            params["backtest"] = 1 if backtest else 0
         result = db.execute(text(f"DELETE FROM alarms WHERE {where}"), params)
         db.commit()
         return {"detail": f"{result.rowcount} alarm(s) deleted"}
