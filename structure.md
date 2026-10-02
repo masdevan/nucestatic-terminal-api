@@ -92,7 +92,8 @@
 │       │   ├── version_20260944_cron_job_runs.py
 │       │   ├── version_20260945_indicators_builtin.py
 │       │   ├── version_20260946_indicator_versions.py
-│       │   └── version_20260947_indicator_versions_session.py
+│       │   ├── version_20260947_indicator_versions_session.py
+│       │   └── version_20260948_remove_old_builtins.py
 │       ├── models
 │       │   ├── alarm.py
 │       │   ├── bookmark.py

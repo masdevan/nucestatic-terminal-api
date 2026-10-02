@@ -8,7 +8,7 @@ MAX_CONTENT = 200_000
 MAX_TOTAL = 1_000_000
 MAX_FILES = 200
 MAX_FOLDERS = 100
-BUILTIN_NAMES = {"doubleema", "double ema", "hkaconcept", "hka concept"}
+BUILTIN_NAMES = {"breakout"}
 BUILTIN_KEY_PATTERN = re.compile(r"^[A-Za-z0-9_.:-]{1,100}$")
 
 
